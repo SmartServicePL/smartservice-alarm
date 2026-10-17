@@ -1,0 +1,12 @@
+{
+  "domain": "smartservice_alarm",
+  "name": "Smart Service Alarm",
+  "codeowners": ["@SmartServicePL"],
+  "config_flow": true,
+  "documentation": "https://github.com/SmartServicePL/smartservice-alarm",
+  "integration_type": "helper",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/SmartServicePL/smartservice-alarm/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

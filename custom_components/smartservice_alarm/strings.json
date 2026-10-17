@@ -1,0 +1,109 @@
+{
+  "title": "Smart Service Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Service Alarm",
+        "description": "Creates an alarm panel with a personal PIN for every user. Modes, delays and sensors checked when arming are set later in the options.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Name of the alarm panel, for example Home."
+        }
+      }
+    },
+    "error": {
+      "empty_name": "Enter a name."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alarm settings",
+        "data": {
+          "arm_away": "Mode: away",
+          "arm_home": "Mode: home",
+          "arm_night": "Mode: night",
+          "exit_delay": "Exit delay",
+          "entry_delay": "Entry delay",
+          "trigger_time": "Alarm duration",
+          "code_arm_required": "PIN required for arming",
+          "sensors": "Sensors checked when arming"
+        },
+        "data_description": {
+          "exit_delay": "Time to leave after arming (arming state).",
+          "entry_delay": "Time to disarm after a trigger before the alarm sounds (pending state).",
+          "trigger_time": "How long the alarm lasts; afterwards the panel returns to the armed mode.",
+          "code_arm_required": "When off, arming without a PIN is allowed (for example by an automation). A PIN that is given must always be correct.",
+          "sensors": "Arming is refused while any of these sensors is open or has no reading."
+        }
+      }
+    },
+    "error": {
+      "no_mode": "Enable at least one mode."
+    }
+  },
+  "exceptions": {
+    "wrong_pin": { "message": "Wrong PIN." },
+    "wrong_current_pin": { "message": "Wrong current PIN." },
+    "locked_out": { "message": "Too many wrong attempts. Try again at {godzina}." },
+    "pin_required": { "message": "Enter your PIN." },
+    "current_pin_required": { "message": "Enter your current PIN." },
+    "mode_disabled": { "message": "This mode is disabled in the alarm settings." },
+    "disarm_first": { "message": "Disarm the alarm first." },
+    "pin_taken": { "message": "Another household member already uses this PIN — choose a different one." },
+    "pin_format": { "message": "The PIN must have 4 to 8 digits." },
+    "pin_trivial": { "message": "This PIN is too easy to guess (repeated or consecutive digits) — choose a different one." },
+    "sensors_open": { "message": "Close: {czujniki}" },
+    "sensors_unavailable": { "message": "No reading: {czujniki}" },
+    "user_required": { "message": "This action requires a signed-in user." },
+    "admin_required": { "message": "Only an administrator can do this." },
+    "own_pin_only": { "message": "You can only set your own PIN." },
+    "unknown_user": { "message": "There is no such user." },
+    "unknown_alarm": { "message": "This is not a Smart Service Alarm panel." },
+    "choose_alarm": { "message": "Several alarm panels are configured — select the alarm panel (entity_id)." }
+  },
+  "services": {
+    "set_pin": {
+      "name": "Set PIN",
+      "description": "Sets the alarm PIN of a user. An administrator can set it for anyone; a user only for himself, with the current PIN if he already has one.",
+      "fields": {
+        "user_id": { "name": "User ID", "description": "ID of the user who owns the PIN." },
+        "pin": { "name": "PIN", "description": "New PIN: 4 to 8 digits, different from the PINs of other users." },
+        "current_pin": { "name": "Current PIN", "description": "Required when a user changes his own existing PIN." },
+        "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
+      }
+    },
+    "clear_pin": {
+      "name": "Remove PIN",
+      "description": "Removes the alarm PIN of a user (administrator only).",
+      "fields": {
+        "user_id": { "name": "User ID", "description": "ID of the user whose PIN is removed." },
+        "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
+      }
+    },
+    "unlock": {
+      "name": "Unlock account",
+      "description": "Lifts the wrong-PIN lockout of an account (administrator only).",
+      "fields": {
+        "user_id": { "name": "User ID", "description": "ID of the locked account, or _bez_konta for calls without a user." },
+        "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
+      }
+    },
+    "status": {
+      "name": "PIN status",
+      "description": "Returns for every user whether a PIN is set and until when the account is locked (administrator only). Never returns a PIN.",
+      "fields": {
+        "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
+      }
+    },
+    "trigger": {
+      "name": "Trigger",
+      "description": "Triggers the alarm like alarm_trigger and stores the name of the sensor that caused it.",
+      "fields": {
+        "czujnik": { "name": "Sensor", "description": "Name of the sensor shown in the alarm and the logbook." }
+      }
+    }
+  }
+}

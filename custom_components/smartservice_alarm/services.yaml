@@ -1,0 +1,64 @@
+set_pin:
+  fields:
+    user_id:
+      required: true
+      example: "0123456789abcdef0123456789abcdef"
+      selector:
+        text:
+    pin:
+      required: true
+      selector:
+        text:
+          type: password
+    current_pin:
+      selector:
+        text:
+          type: password
+    entity_id:
+      selector:
+        entity:
+          integration: smartservice_alarm
+          domain: alarm_control_panel
+
+clear_pin:
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    entity_id:
+      selector:
+        entity:
+          integration: smartservice_alarm
+          domain: alarm_control_panel
+
+unlock:
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    entity_id:
+      selector:
+        entity:
+          integration: smartservice_alarm
+          domain: alarm_control_panel
+
+status:
+  fields:
+    entity_id:
+      selector:
+        entity:
+          integration: smartservice_alarm
+          domain: alarm_control_panel
+
+trigger:
+  target:
+    entity:
+      integration: smartservice_alarm
+      domain: alarm_control_panel
+  fields:
+    czujnik:
+      example: "Drzwi ogrodowe"
+      selector:
+        text:

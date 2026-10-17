@@ -1,0 +1,14 @@
+target-version = "py313"
+line-length = 100
+
+[lint]
+select = ["B", "E", "F", "I", "RUF", "SIM", "UP", "W"]
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+section-order = ["future", "standard-library", "third-party", "first-party", "integration", "local-folder"]
+
+[lint.isort.sections]
+integration = ["custom_components"]
