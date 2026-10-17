@@ -112,9 +112,12 @@ Living room tablet)* or *Wrong PIN from account Anna (3/5)*.
   not reveal whose PIN it is. Hashing runs in executor threads.
 - **Lockout per calling account.** 5 wrong PINs in a row lock the account for
   60 s; each further lockout doubles (120, 240, 480 s) up to 15 minutes.
-  During a lockout attempts are refused without hashing. A correct PIN
-  resets the account; changing a PIN does not lift a lockout; an administrator
-  can `unlock`. Calls without a user share the account `_bez_konta`. Lockouts
+  During a lockout attempts are refused without hashing. A correct PIN does
+  **not** clear the count of wrong PINs (otherwise a household member could
+  keep guessing other PINs between uses of their own): the count is forgotten
+  after 15 minutes without a wrong PIN, and the lockout length drops one step
+  per day without a wrong PIN. Changing a PIN does not lift a lockout; an
+  administrator can `unlock`. Calls without a user share the account `_bez_konta`. Lockouts
   survive a restart.
 - **No PIN oracle.** For a normal user, a `set_pin` that collides with somebody
   else's PIN and a wrong `current_pin` both count as failed attempts.
@@ -127,8 +130,11 @@ Living room tablet)* or *Wrong PIN from account Anna (3/5)*.
 every action call, with the call data — that includes the `code` of
 `alarm_control_panel.*` and the `pin` of `set_pin`. The recorder stores these
 events in its database by default (this applies to every alarm panel with a
-code). To keep PINs out of the database, exclude the event type in your
-configuration:
+code). PINs then stay in the database until the recorder purges old events
+(`purge_keep_days`, 10 days by default); only somebody with access to the
+Home Assistant files or database can read them. To keep PINs out of the
+database, exclude the event type in your configuration (it only removes the
+"triggered by action …" note from manual actions in the logbook):
 
 ```yaml
 recorder:

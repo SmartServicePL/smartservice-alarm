@@ -7,7 +7,9 @@
 - Personal PIN per Home Assistant user, stored only as a scrypt hash with a
   salt per user; unique PINs; PIN rules (4–8 digits, no trivial PINs).
 - Lockout per calling account: 5 wrong PINs → 60 s, doubling up to 15 min,
-  kept across restarts.
+  kept across restarts. A correct PIN does not clear the count of wrong PINs;
+  it expires after 15 minutes without a wrong PIN, and the lockout length
+  drops one step per day without a wrong PIN.
 - Exit delay, entry delay, alarm duration with return to the armed mode.
 - Automation may disarm without a PIN only its own night arming with no alarm
   since.

@@ -118,8 +118,12 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   nie zdradza, czyj to PIN. Liczenie odbywa się w wątkach executora.
 - **Blokada per konto wywołujące.** 5 błędnych PIN-ów z rzędu blokuje konto
   na 60 s; każda kolejna blokada się podwaja (120, 240, 480 s) do 15 minut.
-  W blokadzie próby są odrzucane bez liczenia skrótu. Poprawny PIN zeruje
-  konto; zmiana PIN-u nie zdejmuje blokady; administrator może użyć `unlock`.
+  W blokadzie próby są odrzucane bez liczenia skrótu. Poprawny PIN **nie**
+  zeruje licznika błędnych prób (inaczej domownik mógłby zgadywać cudze PIN-y
+  między użyciami własnego): licznik wygasa po 15 minutach bez błędnego PIN-u,
+  a długość kolejnej blokady spada o jeden stopień po każdej dobie bez
+  błędnego PIN-u. Zmiana PIN-u nie zdejmuje blokady; administrator może użyć
+  `unlock`.
   Wywołania bez użytkownika mają wspólne konto `_bez_konta`. Blokady
   przetrwają restart.
 - **Bez wyroczni PIN-ów.** U zwykłego użytkownika `set_pin` z cudzym PIN-em
@@ -132,8 +136,11 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
 **Uwaga o rejestratorze (recorder).** Home Assistant przy każdym wywołaniu
 usługi wysyła zdarzenie `call_service` z danymi wywołania — także z `code`
 usług `alarm_control_panel.*` i `pin` usługi `set_pin`. Rejestrator domyślnie
-zapisuje te zdarzenia w bazie (dotyczy to każdej centrali z kodem). Żeby PIN-y
-nie trafiały do bazy, wyklucz ten typ zdarzeń w konfiguracji:
+zapisuje te zdarzenia w bazie (dotyczy to każdej centrali z kodem). PIN-y leżą
+wtedy w bazie do czasu usunięcia starych zdarzeń (`purge_keep_days`, domyślnie
+10 dni); odczyta je tylko ktoś z dostępem do plików albo bazy Home Assistant.
+Żeby PIN-y nie trafiały do bazy, wyklucz ten typ zdarzeń w konfiguracji (w
+dzienniku znika wtedy tylko dopisek „wywołane akcją …” przy ręcznych akcjach):
 
 ```yaml
 recorder:

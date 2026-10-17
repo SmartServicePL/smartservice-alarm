@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -178,5 +179,7 @@ async def test_no_pin_in_logs(hass, users, loaded, caplog) -> None:
         await set_pin(hass, users.anna, users.anna, "3579", current_pin=WRONG)
     await set_pin(hass, users.anna, users.anna, "3579", current_pin=pins["anna"])
     await alarm(hass, "alarm_disarm", users.anna, "3579")
+    # Szukamy PIN-u jako osobnej liczby: cztery cyfry mogą trafić się
+    # przypadkiem w znaczniku czasu albo identyfikatorze.
     for pin in (*pins.values(), WRONG, "3579"):
-        assert pin not in caplog.text
+        assert not re.search(rf"(?<!\d){pin}(?!\d)", caplog.text)

@@ -88,15 +88,45 @@ async def test_calls_without_user_share_one_bucket(hass, users, loaded) -> None:
     assert manager_of(loaded).locked_until(users.anna.id) is None
 
 
-async def test_correct_code_resets_account(hass, users, loaded) -> None:
+async def test_correct_code_does_not_reset_streak(hass, users, loaded) -> None:
+    """Decyzja GŁÓWNEGO: 4 złe, dobry kod, 1 zły = blokada."""
     pins = await give_pins(hass, users)
     await alarm(hass, "alarm_arm_away", users.anna)
     for _ in range(4):
         await wrong(hass, users.anna)
     await alarm(hass, "alarm_disarm", users.anna, pins["anna"])
-    assert manager_of(loaded).lockouts == {}
     await alarm(hass, "alarm_arm_away", users.anna)
+    assert await wrong(hass, users.anna) == "locked_out"
+
+
+async def test_streak_expires_after_15_min(hass, users, loaded, freezer) -> None:
+    await give_pins(hass, users)
+    for _ in range(4):
+        await wrong(hass, users.anna)
+    freezer.tick(timedelta(minutes=14, seconds=59))
+    assert await wrong(hass, users.anna) == "locked_out"
+    await service(hass, "unlock", users.admin, {"user_id": users.anna.id})
+    for _ in range(4):
+        await wrong(hass, users.anna)
+    freezer.tick(timedelta(minutes=15))
     assert await wrong(hass, users.anna) == "wrong_pin"
+
+
+async def test_level_drops_one_step_per_day(hass, users, loaded, freezer) -> None:
+    await give_pins(hass, users)
+    for seconds in (60, 120, 240):
+        await lock(hass, users.anna)
+        assert locked_seconds(loaded, users.anna.id) == pytest.approx(seconds, abs=2)
+        freezer.tick(timedelta(seconds=seconds + 1))
+        async_fire_time_changed(hass)
+    # Poziom 3: po jednej dobie bez błędów następna blokada jak przy poziomie 3
+    # (240 s zamiast 480 s), po dwóch dobach jak przy poziomie 2 (120 s).
+    freezer.tick(timedelta(hours=24))
+    await lock(hass, users.anna)
+    assert locked_seconds(loaded, users.anna.id) == pytest.approx(240, abs=2)
+    freezer.tick(timedelta(hours=48))
+    await lock(hass, users.anna)
+    assert locked_seconds(loaded, users.anna.id) == pytest.approx(120, abs=2)
 
 
 async def test_pin_change_keeps_lockout(hass, users, loaded) -> None:
