@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Integration icon and logo (light and dark) for Home Assistant and HACS.
+
 ## 1.0.0
 
 - Alarm panel with states disarmed, arming, armed away / home / night,
