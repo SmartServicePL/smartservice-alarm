@@ -42,6 +42,12 @@ PIN_PATTERN = re.compile(r"[0-9]{4,8}")
 MAX_FAILURES = 5
 LOCK_BASE_SECONDS = 60
 LOCK_MAX_SECONDS = 900
+# A wrong-code streak is forgotten only after this long without a wrong code;
+# a correct code does not clear it (a household member could otherwise keep
+# guessing other PINs between uses of their own).
+FAILURE_MEMORY = timedelta(minutes=15)
+# The lockout level drops by one step per full day without a wrong code.
+LEVEL_DECAY = timedelta(hours=24)
 _MAX_LEVEL = 16
 
 NO_ACCOUNT = "_bez_konta"
@@ -139,27 +145,41 @@ class LockoutBook:
             return None
         return end
 
+    @staticmethod
+    def _since_last_failure(entry: dict[str, Any], now: datetime) -> timedelta | None:
+        last = dt_util.parse_datetime(entry.get("ostatni_blad") or "")
+        return None if last is None else now - last
+
     def register_failure(
         self, bucket: str, now: datetime
     ) -> tuple[int, datetime | None]:
-        """Count a wrong code; return the attempt number and a new lockout end."""
+        """Count a wrong code; return the attempt number and a new lockout end.
+
+        The streak counts from zero again only after FAILURE_MEMORY without a
+        wrong code, and the lockout level drops one step per LEVEL_DECAY
+        without a wrong code.
+        """
         entry = self.data.setdefault(bucket, {"nieudane": 0, "poziom": 0, "do": None})
-        attempt = int(entry.get("nieudane", 0)) + 1
+        attempts = int(entry.get("nieudane", 0))
+        level = int(entry.get("poziom", 0))
+        since = self._since_last_failure(entry, now)
+        if since is not None:
+            if since >= FAILURE_MEMORY:
+                attempts = 0
+            level = max(0, level - int(since / LEVEL_DECAY))
+        attempt = attempts + 1
+        entry["ostatni_blad"] = now.isoformat()
         if attempt < MAX_FAILURES:
-            entry["nieudane"] = attempt
+            entry.update({"nieudane": attempt, "poziom": level})
             return attempt, None
-        level = int(entry.get("poziom", 0)) + 1
+        level = min(level + 1, _MAX_LEVEL)
         until = now + timedelta(seconds=lock_seconds(level))
-        entry.update({"nieudane": 0, "poziom": min(level, _MAX_LEVEL), "do": until.isoformat()})
+        entry.update({"nieudane": 0, "poziom": level, "do": until.isoformat()})
         return attempt, until
 
-    def reset(self, bucket: str) -> bool:
-        """Correct code: forget the account's wrong codes and lockout level."""
-        return self.data.pop(bucket, None) is not None
-
     def unlock(self, bucket: str) -> bool:
-        """Administrator unlock: same as a reset."""
-        return self.reset(bucket)
+        """Administrator unlock: forget the account's wrong codes and level."""
+        return self.data.pop(bucket, None) is not None
 
 
 def lockout_error(until: datetime) -> ServiceValidationError:
@@ -293,8 +313,8 @@ class PinManager:
             self._raise_if_locked(bucket)
             owners = await self._async_owners(code)
             if len(owners) == 1:
-                if self.book.reset(bucket):
-                    await self.async_save()
+                # A correct code does not clear the wrong-code streak; it
+                # expires after FAILURE_MEMORY (see LockoutBook).
                 return owners[0]
             raise await self._async_fail(bucket, "wrong_pin", context)
 
