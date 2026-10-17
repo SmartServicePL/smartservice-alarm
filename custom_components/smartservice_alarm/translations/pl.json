@@ -1,0 +1,109 @@
+{
+  "title": "Smart Service Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Service Alarm",
+        "description": "Tworzy centralę alarmu z osobnym PIN-em dla każdego użytkownika. Tryby, opóźnienia i czujniki sprawdzane przy uzbrojeniu ustawisz później w opcjach.",
+        "data": {
+          "name": "Nazwa"
+        },
+        "data_description": {
+          "name": "Nazwa centrali alarmu, np. Dom."
+        }
+      }
+    },
+    "error": {
+      "empty_name": "Podaj nazwę."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ustawienia alarmu",
+        "data": {
+          "arm_away": "Tryb: poza domem",
+          "arm_home": "Tryb: w domu",
+          "arm_night": "Tryb: noc",
+          "exit_delay": "Opóźnienie wyjścia",
+          "entry_delay": "Opóźnienie wejścia",
+          "trigger_time": "Czas trwania alarmu",
+          "code_arm_required": "PIN wymagany do uzbrojenia",
+          "sensors": "Czujniki sprawdzane przy uzbrojeniu"
+        },
+        "data_description": {
+          "exit_delay": "Czas na wyjście po uzbrojeniu (stan „uzbrajanie”).",
+          "entry_delay": "Czas na rozbrojenie po wyzwoleniu, zanim zacznie się alarm (stan „oczekiwanie”).",
+          "trigger_time": "Jak długo trwa alarm; potem centrala wraca do trybu uzbrojenia.",
+          "code_arm_required": "Wyłączone: uzbrojenie bez PIN-u jest dozwolone (np. z automatyzacji). Podany PIN zawsze musi być poprawny.",
+          "sensors": "Uzbrojenie jest odrzucane, gdy któryś z tych czujników jest otwarty albo nie ma odczytu."
+        }
+      }
+    },
+    "error": {
+      "no_mode": "Włącz co najmniej jeden tryb."
+    }
+  },
+  "exceptions": {
+    "wrong_pin": { "message": "Błędny PIN." },
+    "wrong_current_pin": { "message": "Błędny obecny PIN." },
+    "locked_out": { "message": "Zbyt wiele błędnych prób. Spróbuj o {godzina}." },
+    "pin_required": { "message": "Podaj PIN." },
+    "current_pin_required": { "message": "Podaj obecny PIN." },
+    "mode_disabled": { "message": "Ten tryb jest wyłączony w ustawieniach alarmu." },
+    "disarm_first": { "message": "Najpierw rozbrój alarm." },
+    "pin_taken": { "message": "Ten PIN ma już inny domownik — wybierz inny." },
+    "pin_format": { "message": "PIN to od 4 do 8 cyfr." },
+    "pin_trivial": { "message": "Ten PIN jest zbyt łatwy (te same albo kolejne cyfry) — wybierz inny." },
+    "sensors_open": { "message": "Zamknij: {czujniki}" },
+    "sensors_unavailable": { "message": "Brak odczytu: {czujniki}" },
+    "user_required": { "message": "Ta czynność wymaga zalogowanego użytkownika." },
+    "admin_required": { "message": "Tylko administrator może to zrobić." },
+    "own_pin_only": { "message": "Możesz ustawić tylko własny PIN." },
+    "unknown_user": { "message": "Nie ma takiego użytkownika." },
+    "unknown_alarm": { "message": "To nie jest centrala Smart Service Alarm." },
+    "choose_alarm": { "message": "Skonfigurowano kilka central alarmu — wskaż centralę (entity_id)." }
+  },
+  "services": {
+    "set_pin": {
+      "name": "Ustaw PIN",
+      "description": "Ustawia PIN alarmu użytkownika. Administrator ustawia go każdemu; użytkownik tylko sobie, podając obecny PIN, jeśli już go ma.",
+      "fields": {
+        "user_id": { "name": "ID użytkownika", "description": "ID użytkownika, do którego należy PIN." },
+        "pin": { "name": "PIN", "description": "Nowy PIN: od 4 do 8 cyfr, inny niż PIN-y pozostałych użytkowników." },
+        "current_pin": { "name": "Obecny PIN", "description": "Wymagany, gdy użytkownik zmienia swój istniejący PIN." },
+        "entity_id": { "name": "Centrala alarmu", "description": "Potrzebna tylko przy więcej niż jednej centrali." }
+      }
+    },
+    "clear_pin": {
+      "name": "Usuń PIN",
+      "description": "Usuwa PIN alarmu użytkownika (tylko administrator).",
+      "fields": {
+        "user_id": { "name": "ID użytkownika", "description": "ID użytkownika, którego PIN jest usuwany." },
+        "entity_id": { "name": "Centrala alarmu", "description": "Potrzebna tylko przy więcej niż jednej centrali." }
+      }
+    },
+    "unlock": {
+      "name": "Odblokuj konto",
+      "description": "Zdejmuje blokadę konta po błędnych PIN-ach (tylko administrator).",
+      "fields": {
+        "user_id": { "name": "ID użytkownika", "description": "ID zablokowanego konta albo _bez_konta dla wywołań bez użytkownika." },
+        "entity_id": { "name": "Centrala alarmu", "description": "Potrzebna tylko przy więcej niż jednej centrali." }
+      }
+    },
+    "status": {
+      "name": "Stan PIN-ów",
+      "description": "Zwraca dla każdego użytkownika, czy ma PIN i do kiedy jego konto jest zablokowane (tylko administrator). Nigdy nie zwraca PIN-u.",
+      "fields": {
+        "entity_id": { "name": "Centrala alarmu", "description": "Potrzebna tylko przy więcej niż jednej centrali." }
+      }
+    },
+    "trigger": {
+      "name": "Wyzwól",
+      "description": "Wyzwala alarm jak alarm_trigger i zapisuje nazwę czujnika, który go spowodował.",
+      "fields": {
+        "czujnik": { "name": "Czujnik", "description": "Nazwa czujnika pokazywana w alarmie i w dzienniku." }
+      }
+    }
+  }
+}
