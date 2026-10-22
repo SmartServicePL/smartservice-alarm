@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- New Smart Service logo in the integration icon and logo (light and dark).
+
 ## 1.0.1
 
 - Integration icon and logo (light and dark) for Home Assistant and HACS.
