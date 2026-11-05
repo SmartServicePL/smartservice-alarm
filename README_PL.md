@@ -40,6 +40,20 @@ Wyzwolenie w czasie uzbrojenia → `pending` (opóźnienie wejścia) →
 Wyzwolenie przy rozbrojonej centrali albo w czasie opóźnienia wyjścia jest
 pomijane.
 
+**Jedna czujka najwyżej 3 alarmy.** W jednym uzbrojeniu jedna czujka (nazwa
+przekazana do `smartservice_alarm.trigger`) wyzwala alarm najwyżej 3 razy.
+Kolejne jej wyzwolenia są pomijane do rozbrojenia: pierwsze z nich wysyła raz
+`czujka_pominieta`, a czujka trafia do `czujniki_pominiete`. Inne czujki
+wyzwalają dalej. Rozbrojenie i nowe uzbrojenie zerują licznik.
+
+**Przerwa.** Gdy Home Assistant startuje ponownie, a centrala pilnowała
+(opóźnienie wyjścia, uzbrojenie, opóźnienie wejścia albo alarm), odliczania
+zakończone w czasie przerwy są nadrabiane, a po starcie Home Assistant
+centrala wysyła `powrot_po_przerwie` z długością przerwy w minutach
+(`przerwa_min`; bez tego pola, gdy nie wiadomo). Gdy pilnuje, centrala co
+minutę i przy zatrzymaniu Home Assistant zapisuje chwilę, w której ostatnio
+działała. Ponowne wczytanie wpisu nie jest przerwą.
+
 Dodatkowe atrybuty (żadnych danych PIN):
 
 | Atrybut | Znaczenie |
@@ -50,6 +64,7 @@ Dodatkowe atrybuty (żadnych danych PIN):
 | `czujnik_wyzwalajacy` | nazwa czujnika przekazana do `smartservice_alarm.trigger` |
 | `tryb` | tryb uzbrojenia obowiązujący albo właśnie włączany |
 | `koniec_odliczania` | koniec trwającego opóźnienia wyjścia, wejścia albo alarmu (ISO) |
+| `czujniki_pominiete` | czujki pominięte do rozbrojenia po 3 alarmach (nazwy) |
 
 **Nocne rozbrojenie przez automat.** Wywołanie bez użytkownika
 (automatyzacja) może rozbroić bez PIN-u tylko wtedy, gdy centrala jest w
@@ -103,7 +118,9 @@ pokazać komunikat po polsku, tłumaczy klucz
 Każda czynność wysyła zdarzenie `smartservice_alarm_event` z polem `akcja`
 (`uzbrojenie`, `rozbrojenie`, `zly_kod`, `blokada`, `odblokowanie`,
 `wyzwolenie`, `pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` — otwarty
-czujnik na końcu czasu na wyjście, `ustawienia` — zmiana ustawień centrali),
+czujnik na końcu czasu na wyjście, `ustawienia` — zmiana ustawień centrali,
+`czujka_pominieta` — czujka pominięta po 3 alarmach, `powrot_po_przerwie` —
+Home Assistant wrócił po przerwie, gdy centrala pilnowała),
 trybem, właścicielem PIN-u i kontem wywołującym (id i imiona), nazwą czujnika,
 licznikiem prób i końcem blokady. Dziennik pokazuje je jako tekst, np. „Rozbrojenie: Jan (z konta:
 Tablet salon)”, „Błędny PIN z konta Jan (3/5)”, „Blokada konta Jan

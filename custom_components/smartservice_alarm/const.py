@@ -71,3 +71,14 @@ ACTION_PIN_CLEARED: Final = "pin_usuniety"
 ACTION_ARM_REFUSED: Final = "odmowa_uzbrojenia"
 # Z17 (30.10): the options changed (only while disarmed).
 ACTION_OPTIONS: Final = "ustawienia"
+# Z25: one sensor triggered the alarm 3 times in one arming - its next
+# triggers are bypassed until disarming (told once).
+ACTION_SENSOR_BYPASSED: Final = "czujka_pominieta"
+# Z21: Home Assistant started again while the panel guarded - how long it was
+# down (minutes, when known) and the state after the countdowns caught up.
+ACTION_BACK: Final = "powrot_po_przerwie"
+
+# Z25: at most this many triggers of one sensor in one arming.
+MAX_TRIGGERS_PER_SENSOR: Final = 3
+# Extra attribute: the sensors bypassed until disarming (names).
+ATTR_BYPASSED: Final = "czujniki_pominiete"

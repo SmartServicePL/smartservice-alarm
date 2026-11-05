@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+- One sensor triggers the alarm at most 3 times in one arming. Its next
+  triggers are bypassed until disarming; the first bypassed one fires
+  `czujka_pominieta` with the sensor's name (once) and the attribute
+  `czujniki_pominiete` lists it. Disarming and a new arming forget the count.
+- A start of Home Assistant while the panel guarded (exit delay, armed, entry
+  delay or alarm) fires `powrot_po_przerwie` once Home Assistant has started:
+  the break in minutes (`przerwa_min`, when known), the state before and
+  after. While it guards, the panel writes the moment it last ran every
+  minute and at Home Assistant's stop.
+
 ## 1.1.0
 
 - The sensors checked when arming are checked again at the end of the exit
