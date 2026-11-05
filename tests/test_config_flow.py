@@ -70,3 +70,39 @@ async def test_options_flow_saves_and_reloads(hass, users) -> None:
     assert entry.options == options
     assert isinstance(entry.options["exit_delay"], int)
     assert hass.states.get(ENTITY).attributes["code_arm_required"] is True
+
+
+async def test_z17_settings_only_while_disarmed_and_logged(hass, users) -> None:
+    """Z17 (30.10): the options change only while disarmed; a change is an
+    event (the logbook says which settings)."""
+
+    from custom_components.smartservice_alarm.const import EVENT_ALARM
+
+    from .conftest import alarm, give_pins
+
+    entry = make_entry(hass, exit_delay=0)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    pins = await give_pins(hass, users)
+    found = []
+    hass.bus.async_listen(EVENT_ALARM, found.append)
+
+    await alarm(hass, "alarm_arm_away", None)
+    assert hass.states.get(ENTITY).state == "armed_away"
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    changed = {**entry.options, "exit_delay": 20}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], changed)
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "not_disarmed"}
+    assert entry.options["exit_delay"] == 0
+    # FlowManager.async_abort is a @callback (returns None), not a coroutine.
+    hass.config_entries.options.async_abort(result["flow_id"])
+
+    await alarm(hass, "alarm_disarm", users.piotr, pins["piotr"])
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], changed)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    logged = [event for event in found if event.data.get("akcja") == "ustawienia"]
+    assert len(logged) == 1 and logged[0].data["zmienione"] == ["exit_delay"]

@@ -27,16 +27,16 @@ WRONG = "4826"
 
 async def test_status_for_admin_without_secrets(hass, users, loaded) -> None:
     pins = await give_pins(hass, users)
-    await service(hass, "clear_pin", users.admin, {"user_id": users.osoba3.id})
+    await service(hass, "clear_pin", users.admin, {"user_id": users.adam.id})
     for _ in range(5):
         with pytest.raises(ServiceValidationError):
-            await alarm(hass, "alarm_disarm", users.osoba2, WRONG)
+            await alarm(hass, "alarm_disarm", users.piotr, WRONG)
 
     response = await service(hass, "status", users.admin, response=True)
     assert response[users.admin.id] == {"pin": True, "zablokowany_do": None}
-    assert response[users.osoba3.id] == {"pin": False, "zablokowany_do": None}
-    assert response[users.osoba2.id]["pin"] is True
-    until = dt_util.parse_datetime(response[users.osoba2.id]["zablokowany_do"])
+    assert response[users.adam.id] == {"pin": False, "zablokowany_do": None}
+    assert response[users.piotr.id]["pin"] is True
+    until = dt_util.parse_datetime(response[users.piotr.id]["zablokowany_do"])
     assert until > dt_util.utcnow()
     text = json.dumps(response)
     for pin in pins.values():
@@ -48,13 +48,13 @@ async def test_status_for_admin_without_secrets(hass, users, loaded) -> None:
 
 async def test_status_admin_only(hass, users, loaded) -> None:
     with pytest.raises(ServiceValidationError) as err:
-        await service(hass, "status", users.osoba2, response=True)
+        await service(hass, "status", users.piotr, response=True)
     assert err.value.translation_key == "admin_required"
     with pytest.raises(ServiceValidationError) as err:
         await service(hass, "status", None, response=True)
     assert err.value.translation_key == "user_required"
     with pytest.raises(ServiceValidationError) as err:
-        await service(hass, "unlock", None, {"user_id": users.osoba2.id})
+        await service(hass, "unlock", None, {"user_id": users.piotr.id})
     assert err.value.translation_key == "user_required"
 
 
@@ -73,16 +73,16 @@ async def test_two_alarms_need_entity_id(hass, users, loaded) -> None:
     assert await hass.config_entries.async_setup(other.entry_id)
     await hass.async_block_till_done()
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.admin, users.osoba2, "2468")
+        await set_pin(hass, users.admin, users.piotr, "2468")
     assert err.value.translation_key == "choose_alarm"
     await service(
         hass,
         "set_pin",
         users.admin,
-        {"user_id": users.osoba2.id, "pin": "2468", "entity_id": "alarm_control_panel.garaz"},
+        {"user_id": users.piotr.id, "pin": "2468", "entity_id": "alarm_control_panel.garaz"},
     )
-    assert other.runtime_data.has_pin(users.osoba2.id)
-    assert not manager_of(loaded).has_pin(users.osoba2.id)
+    assert other.runtime_data.has_pin(users.piotr.id)
+    assert not manager_of(loaded).has_pin(users.piotr.id)
     with pytest.raises(ServiceValidationError) as err:
         await service(
             hass, "status", users.admin, {"entity_id": "alarm_control_panel.nie_ma"}, response=True
@@ -98,7 +98,7 @@ async def test_unknown_users_removed_at_startup(hass, users, hass_storage) -> No
         "minor_version": 1,
         "key": f"{DOMAIN}.{entry.entry_id}",
         "data": {
-            "piny": {"usuniety": record, users.osoba2.id: record},
+            "piny": {"usuniety": record, users.piotr.id: record},
             "blokady": {
                 "usuniety": {"nieudane": 2, "poziom": 0, "do": None},
                 "_bez_konta": {"nieudane": 1, "poziom": 0, "do": None},
@@ -109,7 +109,7 @@ async def test_unknown_users_removed_at_startup(hass, users, hass_storage) -> No
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     manager = manager_of(entry)
-    assert set(manager.pins) == {users.osoba2.id}
+    assert set(manager.pins) == {users.piotr.id}
     assert set(manager.lockouts) == {"_bez_konta"}
 
 
@@ -122,30 +122,30 @@ async def test_diagnostics_redact_salt_and_hash(hass, users, loaded) -> None:
         assert record["hash"] not in text
     for pin in pins.values():
         assert pin not in text
-    assert data["piny"][users.osoba2.id]["salt"] == "**REDACTED**"
-    assert data["piny"][users.osoba2.id]["n"] == 16
+    assert data["piny"][users.piotr.id]["salt"] == "**REDACTED**"
+    assert data["piny"][users.piotr.id]["n"] == 16
     # The manager's own data is untouched.
-    assert manager_of(loaded).pins[users.osoba2.id]["salt"] != "**REDACTED**"
+    assert manager_of(loaded).pins[users.piotr.id]["salt"] != "**REDACTED**"
 
 
 async def test_events_and_logbook_text(hass, users, loaded) -> None:
     found: list[Event] = []
     hass.bus.async_listen(EVENT_ALARM, found.append)
     pins = await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     for _ in range(5):
         with pytest.raises(ServiceValidationError):
-            await alarm(hass, "alarm_disarm", users.osoba3, WRONG)
-    await alarm(hass, "alarm_disarm", users.tablet, pins["osoba2"])
+            await alarm(hass, "alarm_disarm", users.adam, WRONG)
+    await alarm(hass, "alarm_disarm", users.tablet, pins["piotr"])
     await hass.async_block_till_done()
 
     texts = [describe(dict(e.data), "pl") for e in found]
-    assert "PIN ustawiony: Osoba 2 (z konta: Osoba 1)" in texts
-    assert "Uzbrojenie (poza domem): Osoba 2" in texts
-    assert "Błędny PIN z konta Osoba 3 (3/5)" in texts
-    assert any(t.startswith("Blokada konta Osoba 3 do ") for t in texts)
-    assert "Rozbrojenie: Osoba 2 (z konta: Tablet salon)" in texts
-    assert describe(dict(found[-1].data), "en") == "Disarmed: Osoba 2 (from account: Tablet salon)"
+    assert "PIN ustawiony: Piotr (z konta: Jan)" in texts
+    assert "Uzbrojenie (poza domem): Piotr" in texts
+    assert "Błędny PIN z konta Adam (3/5)" in texts
+    assert any(t.startswith("Blokada konta Adam do ") for t in texts)
+    assert "Rozbrojenie: Piotr (z konta: Tablet salon)" in texts
+    assert describe(dict(found[-1].data), "en") == "Disarmed: Piotr (from account: Tablet salon)"
     assert describe({"akcja": "wyzwolenie", "czujnik": "drzwi ogrodowe"}, "pl") == (
         "Alarm: drzwi ogrodowe"
     )
@@ -164,21 +164,21 @@ async def test_events_and_logbook_text(hass, users, loaded) -> None:
     hass.config.language = "pl"
     entry = describer(found[-1])
     assert entry["name"] == "Dom"
-    assert entry["message"] == "Rozbrojenie: Osoba 2 (z konta: Tablet salon)"
+    assert entry["message"] == "Rozbrojenie: Piotr (z konta: Tablet salon)"
     assert entry["entity_id"] == ENTITY
 
 
 async def test_no_pin_in_logs(hass, users, loaded, caplog) -> None:
     caplog.set_level(logging.DEBUG, logger="custom_components.smartservice_alarm")
     pins = await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_away", users.osoba2, pins["osoba2"])
+    await alarm(hass, "alarm_arm_away", users.piotr, pins["piotr"])
     for _ in range(5):
         with pytest.raises(ServiceValidationError):
-            await alarm(hass, "alarm_disarm", users.osoba3, WRONG)
+            await alarm(hass, "alarm_disarm", users.adam, WRONG)
     with pytest.raises(ServiceValidationError):
-        await set_pin(hass, users.osoba2, users.osoba2, "3579", current_pin=WRONG)
-    await set_pin(hass, users.osoba2, users.osoba2, "3579", current_pin=pins["osoba2"])
-    await alarm(hass, "alarm_disarm", users.osoba2, "3579")
+        await set_pin(hass, users.piotr, users.piotr, "3579", current_pin=WRONG)
+    await set_pin(hass, users.piotr, users.piotr, "3579", current_pin=pins["piotr"])
+    await alarm(hass, "alarm_disarm", users.piotr, "3579")
     # Szukamy PIN-u jako osobnej liczby: cztery cyfry mogą trafić się
     # przypadkiem w znaczniku czasu albo identyfikatorze.
     for pin in (*pins.values(), WRONG, "3579"):

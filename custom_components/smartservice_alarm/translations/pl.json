@@ -41,7 +41,8 @@
       }
     },
     "error": {
-      "no_mode": "Włącz co najmniej jeden tryb."
+      "no_mode": "Włącz co najmniej jeden tryb.",
+      "not_disarmed": "Zmień ustawienia po rozbrojeniu alarmu."
     }
   },
   "exceptions": {

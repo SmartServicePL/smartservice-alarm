@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0
+
+- The sensors checked when arming are checked again at the end of the exit
+  delay; open or without a reading: the panel goes back to disarmed and
+  fires `odmowa_uzbrojenia` with their names.
+- The options change only while the panel is disarmed; a change fires
+  `ustawienia` (the logbook names the changed settings).
+- A new entry's alarm duration is 10 minutes (was 30).
+- One wrong-code counter for the whole panel: 15 wrong codes from several
+  accounts within 15 minutes lock every account except administrators for
+  15 minutes (an administrator's unlock ends it).
+- README: what the alarm is (designed after PN-EN 50131 grade 2, not a
+  certified control panel).
+
 ## 1.0.2
 
 - New Smart Service logo in the integration icon and logo (light and dark).

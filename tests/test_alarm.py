@@ -53,9 +53,9 @@ async def refused(hass, service, user, code=None) -> str:
 async def test_disarm_with_each_pin_sets_changed_by(hass, users, loaded) -> None:
     pins = await give_pins(hass, users)
     events = captured(hass)
-    names = {"admin": "Osoba 1", "osoba2": "Osoba 2", "osoba3": "Osoba 3", "tablet": "Tablet salon"}
+    names = {"admin": "Jan", "piotr": "Piotr", "adam": "Adam", "tablet": "Tablet salon"}
     for key, pin in pins.items():
-        await alarm(hass, "alarm_arm_away", users.osoba2)
+        await alarm(hass, "alarm_arm_away", users.piotr)
         assert state(hass).state == "armed_away"
         await alarm(hass, "alarm_disarm", users.tablet, pin)
         current = state(hass)
@@ -64,7 +64,7 @@ async def test_disarm_with_each_pin_sets_changed_by(hass, users, loaded) -> None
         assert current.attributes["zmiana_przez"] == "uzytkownik"
     await hass.async_block_till_done()
     disarms = [e.data for e in events if e.data["akcja"] == "rozbrojenie"]
-    assert disarms[1]["wlasciciel"] == "Osoba 2"
+    assert disarms[1]["wlasciciel"] == "Piotr"
     assert disarms[1]["konto"] == "Tablet salon"
     assert disarms[1]["tryb"] == "armed_away"
 
@@ -72,17 +72,17 @@ async def test_disarm_with_each_pin_sets_changed_by(hass, users, loaded) -> None
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_wrong_pin_and_missing_pin(hass, users, loaded) -> None:
     await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_away", users.osoba2)
-    assert await refused(hass, "alarm_disarm", users.osoba2, "4826") == "wrong_pin"
-    assert await refused(hass, "alarm_disarm", users.osoba2) == "pin_required"
-    assert await refused(hass, "alarm_disarm", users.osoba2, "") == "pin_required"
+    await alarm(hass, "alarm_arm_away", users.piotr)
+    assert await refused(hass, "alarm_disarm", users.piotr, "4826") == "wrong_pin"
+    assert await refused(hass, "alarm_disarm", users.piotr) == "pin_required"
+    assert await refused(hass, "alarm_disarm", users.piotr, "") == "pin_required"
     assert state(hass).state == "armed_away"
 
 
 async def test_wrong_pin_message_is_translated(hass, users, loaded) -> None:
     await give_pins(hass, users)
     with pytest.raises(ServiceValidationError) as err:
-        await alarm(hass, "alarm_disarm", users.osoba2, "4826")
+        await alarm(hass, "alarm_disarm", users.piotr, "4826")
     # The backend message is always English without the final period; the
     # Polish text comes from translations/pl.json via the translation key.
     assert str(err.value) == "Wrong PIN"
@@ -94,12 +94,12 @@ async def test_entity_default_code_is_ignored(hass, users, loaded) -> None:
     from homeassistant.helpers import entity_registry as er
 
     pins = await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     er.async_get(hass).async_update_entity_options(
-        ENTITY, "alarm_control_panel", {"default_code": pins["osoba2"]}
+        ENTITY, "alarm_control_panel", {"default_code": pins["piotr"]}
     )
     await hass.async_block_till_done()
-    assert await refused(hass, "alarm_disarm", users.osoba2) == "pin_required"
+    assert await refused(hass, "alarm_disarm", users.piotr) == "pin_required"
 
 
 # -- arming, modes, G3 ----------------------------------------------------------
@@ -107,18 +107,18 @@ async def test_entity_default_code_is_ignored(hass, users, loaded) -> None:
 
 @pytest.mark.parametrize("entry_options", [{"arm_home": False, "arm_night": False}])
 async def test_disabled_mode(hass, users, loaded) -> None:
-    assert await refused(hass, "alarm_arm_home", users.osoba2) == "mode_disabled"
+    assert await refused(hass, "alarm_arm_home", users.piotr) == "mode_disabled"
     assert await refused(hass, "alarm_arm_night", None) == "mode_disabled"
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     assert state(hass).state == "arming"
 
 
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_g3_optional_code(hass, users, loaded) -> None:
     pins = await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_home", users.tablet, pins["osoba3"])
-    assert state(hass).attributes["changed_by"] == "Osoba 3"
-    await alarm(hass, "alarm_disarm", users.tablet, pins["osoba3"])
+    await alarm(hass, "alarm_arm_home", users.tablet, pins["adam"])
+    assert state(hass).attributes["changed_by"] == "Adam"
+    await alarm(hass, "alarm_disarm", users.tablet, pins["adam"])
 
     assert await refused(hass, "alarm_arm_home", users.tablet, "4826") == "wrong_pin"
     assert manager_of(loaded).lockouts[users.tablet.id]["nieudane"] == 1
@@ -138,13 +138,13 @@ async def test_code_required_for_arming(hass, users, loaded) -> None:
         await alarm(hass, "alarm_arm_away", None)
     # Raised by the alarm panel base class before the integration is called.
     assert err.value.translation_key == "code_arm_required"
-    assert await refused(hass, "alarm_arm_away", users.osoba2, "4826") == "wrong_pin"
-    await alarm(hass, "alarm_arm_away", users.osoba2, pins["osoba2"])
+    assert await refused(hass, "alarm_arm_away", users.piotr, "4826") == "wrong_pin"
+    await alarm(hass, "alarm_arm_away", users.piotr, pins["piotr"])
     assert state(hass).state == "armed_away"
 
 
 async def test_exit_delay(hass, users, loaded, freezer) -> None:
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     current = state(hass)
     assert current.state == "arming"
     assert current.attributes["tryb"] == "armed_away"
@@ -183,7 +183,7 @@ def sensors(hass, okno: str, drzwi: str | None) -> None:
 
 
 @pytest.mark.parametrize("entry_options", [SENSORS])
-@pytest.mark.parametrize("who", ["osoba2", None])
+@pytest.mark.parametrize("who", ["piotr", None])
 async def test_g4_open_sensors_refuse(hass, users, loaded, who) -> None:
     user = getattr(users, who) if who else None
     sensors(hass, "on", "on")
@@ -195,7 +195,7 @@ async def test_g4_open_sensors_refuse(hass, users, loaded, who) -> None:
 
 
 @pytest.mark.parametrize("entry_options", [SENSORS])
-@pytest.mark.parametrize("who", ["osoba2", None])
+@pytest.mark.parametrize("who", ["piotr", None])
 async def test_g4_unavailable_sensors_refuse(hass, users, loaded, who) -> None:
     user = getattr(users, who) if who else None
     sensors(hass, "off", "unavailable")
@@ -226,7 +226,7 @@ async def test_g4_closed_sensors_arm(hass, users, loaded) -> None:
 
 async def test_trigger_pending_triggered_back_to_armed(hass, users, loaded, freezer) -> None:
     events = captured(hass)
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     # During the exit delay a trigger is ignored.
     await trigger(hass, czujnik="drzwi ogrodowe")
     assert state(hass).state == "arming"
@@ -242,7 +242,7 @@ async def test_trigger_pending_triggered_back_to_armed(hass, users, loaded, free
     assert state(hass).state == "pending"
     await tick(hass, freezer, 2)
     assert state(hass).state == "triggered"
-    await tick(hass, freezer, 30 * 60 - 1)
+    await tick(hass, freezer, 10 * 60 - 1)
     assert state(hass).state == "triggered"
     await tick(hass, freezer, 2)
     current = state(hass)
@@ -267,16 +267,16 @@ async def test_standard_alarm_trigger(hass, users, loaded) -> None:
     await alarm(hass, "alarm_trigger", None)
     assert state(hass).state == "triggered"
     assert state(hass).attributes["czujnik_wyzwalajacy"] is None
-    assert await refused(hass, "alarm_arm_away", users.osoba2) == "disarm_first"
+    assert await refused(hass, "alarm_arm_away", users.piotr) == "disarm_first"
 
 
 async def test_disarm_during_pending(hass, users, loaded, freezer) -> None:
     pins = await give_pins(hass, users)
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     await tick(hass, freezer, 61)
     await trigger(hass, czujnik="ruch hol")
     assert state(hass).state == "pending"
-    await alarm(hass, "alarm_disarm", users.osoba2, pins["osoba2"])
+    await alarm(hass, "alarm_disarm", users.piotr, pins["piotr"])
     assert state(hass).state == "disarmed"
     assert state(hass).attributes["czujnik_wyzwalajacy"] is None
     await tick(hass, freezer, 3600)
@@ -298,7 +298,7 @@ async def test_g1_automation_disarms_own_night_arming(hass, users, loaded) -> No
 
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_g1_not_after_user_arming(hass, users, loaded) -> None:
-    await alarm(hass, "alarm_arm_night", users.osoba2)
+    await alarm(hass, "alarm_arm_night", users.piotr)
     assert await refused(hass, "alarm_disarm", None) == "pin_required"
     assert state(hass).state == "armed_night"
 
@@ -314,7 +314,7 @@ async def test_g1_only_night_mode(hass, users, loaded) -> None:
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_g1_user_call_needs_pin(hass, users, loaded) -> None:
     await alarm(hass, "alarm_arm_night", None)
-    assert await refused(hass, "alarm_disarm", users.osoba2) == "pin_required"
+    assert await refused(hass, "alarm_disarm", users.piotr) == "pin_required"
 
 
 @pytest.mark.parametrize("entry_options", [{"entry_delay": 30}])
@@ -328,7 +328,7 @@ async def test_g1_not_after_pending_or_triggered(hass, users, loaded, freezer) -
     await tick(hass, freezer, 31)
     assert state(hass).state == "triggered"
     assert await refused(hass, "alarm_disarm", None) == "pin_required"
-    await tick(hass, freezer, 30 * 60 + 1)
+    await tick(hass, freezer, 10 * 60 + 1)
     assert state(hass).state == "armed_night"
     assert state(hass).attributes["uzbrojenie_przez_automat"] is True
     assert await refused(hass, "alarm_disarm", None) == "pin_required"
@@ -358,7 +358,7 @@ async def test_state_survives_restart(hass, users, loaded) -> None:
 
 
 async def test_countdowns_resume_after_restart(hass, users, loaded, freezer) -> None:
-    await alarm(hass, "alarm_arm_away", users.osoba2)
+    await alarm(hass, "alarm_arm_away", users.piotr)
     assert await hass.config_entries.async_unload(loaded.entry_id)
     await tick(hass, freezer, 30)
     assert await hass.config_entries.async_setup(loaded.entry_id)
@@ -376,3 +376,53 @@ async def test_countdowns_resume_after_restart(hass, users, loaded, freezer) -> 
     assert state(hass).state == "triggered"
     await tick(hass, freezer, 29 * 60 + 1)
     assert state(hass).state == "armed_away"
+
+
+# -- Z13: the sensors checked again at the end of the exit delay ------------------
+
+SENSORS_DELAY = {**SENSORS, "exit_delay": 60}
+
+
+@pytest.mark.parametrize("entry_options", [SENSORS_DELAY])
+async def test_z13_a_window_opened_during_the_exit_delay_disarms_with_the_reason(
+    hass, users, loaded, freezer
+) -> None:
+    found = captured(hass)
+    sensors(hass, "off", "off")
+    await alarm(hass, "alarm_arm_away", users.piotr)
+    assert state(hass).state == "arming"
+    sensors(hass, "on", "unavailable")
+    await tick(hass, freezer, 61)
+    assert state(hass).state == "disarmed"
+    assert state(hass).attributes["koniec_odliczania"] is None
+    refusal = [event for event in found if event.data["akcja"] == "odmowa_uzbrojenia"]
+    assert len(refusal) == 1
+    assert refusal[0].data["otwarte"] == ["okno salon"]
+    assert refusal[0].data["brak_odczytu"] == ["drzwi taras"]
+    assert refusal[0].data["tryb"] == "armed_away"
+
+
+@pytest.mark.parametrize("entry_options", [SENSORS_DELAY])
+async def test_z13_closed_at_the_end_arms(hass, users, loaded, freezer) -> None:
+    sensors(hass, "off", "off")
+    await alarm(hass, "alarm_arm_away", users.piotr)
+    sensors(hass, "on", "off")
+    sensors(hass, "off", "off")
+    await tick(hass, freezer, 61)
+    assert state(hass).state == "armed_away"
+
+
+def test_z13_logbook_text() -> None:
+    from custom_components.smartservice_alarm.events import describe
+
+    data = {
+        "akcja": "odmowa_uzbrojenia",
+        "otwarte": ["okno salon"],
+        "brak_odczytu": ["drzwi taras"],
+    }
+    assert describe(data, "pl") == (
+        "Nieuzbrojony po czasie na wyjście — Zamknij: okno salon. Brak odczytu: drzwi taras"
+    )
+    assert describe({"akcja": "odmowa_uzbrojenia", "otwarte": ["okno salon"]}, "en") == (
+        "Not armed after the exit delay — Close: okno salon"
+    )

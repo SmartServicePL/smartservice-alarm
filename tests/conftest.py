@@ -50,20 +50,20 @@ def scrypt_calls(monkeypatch) -> ScryptCounter:
 @dataclass
 class Users:
     admin: MockUser
-    osoba2: MockUser
-    osoba3: MockUser
+    piotr: MockUser
+    adam: MockUser
     tablet: MockUser
 
 
 @pytest.fixture
 async def users(hass: HomeAssistant) -> Users:
-    """Administrator Osoba 1, zwykli użytkownicy Osoba 2 i Osoba 3, konto tabletu."""
+    """Administrator Jan, zwykli użytkownicy Piotr i Adam, konto tabletu."""
     admin_group = await hass.auth.async_get_group(GROUP_ID_ADMIN)
     user_group = await hass.auth.async_get_group(GROUP_ID_USER)
     return Users(
-        admin=MockUser(name="Osoba 1", groups=[admin_group]).add_to_hass(hass),
-        osoba2=MockUser(name="Osoba 2", groups=[user_group]).add_to_hass(hass),
-        osoba3=MockUser(name="Osoba 3", groups=[user_group]).add_to_hass(hass),
+        admin=MockUser(name="Jan", groups=[admin_group]).add_to_hass(hass),
+        piotr=MockUser(name="Piotr", groups=[user_group]).add_to_hass(hass),
+        adam=MockUser(name="Adam", groups=[user_group]).add_to_hass(hass),
         tablet=MockUser(name="Tablet salon", groups=[user_group]).add_to_hass(hass),
     )
 
@@ -145,7 +145,7 @@ async def set_pin(
 
 async def give_pins(hass: HomeAssistant, users: Users) -> dict[str, str]:
     """PIN-y wszystkich domowników ustawione przez administratora."""
-    chosen = {"admin": "2580", "osoba2": "1357", "osoba3": "8642", "tablet": "9157"}
+    chosen = {"admin": "2580", "piotr": "1357", "adam": "8642", "tablet": "9157"}
     for key, pin in chosen.items():
         await set_pin(hass, users.admin, getattr(users, key), pin)
     return chosen

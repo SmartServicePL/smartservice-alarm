@@ -41,7 +41,8 @@
       }
     },
     "error": {
-      "no_mode": "Enable at least one mode."
+      "no_mode": "Enable at least one mode.",
+      "not_disarmed": "Change the settings after disarming the alarm."
     }
   },
   "exceptions": {

@@ -14,9 +14,11 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.core import callback
-from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er, selector
 
+from . import events
 from .const import (
+    ACTION_OPTIONS,
     CONF_ARM_AWAY,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
@@ -81,13 +83,25 @@ class SmartServiceAlarmConfigFlow(ConfigFlow, domain=DOMAIN):
 class SmartServiceAlarmOptionsFlow(OptionsFlowWithReload):
     """Modes, delays, code for arming and sensors checked when arming."""
 
+    def _panel_entity(self) -> str | None:
+        registry = er.async_get(self.hass)
+        for item in er.async_entries_for_config_entry(registry, self.config_entry.entry_id):
+            if item.domain == "alarm_control_panel":
+                return item.entity_id
+        return None
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         current = {**DEFAULT_OPTIONS, **self.config_entry.options}
         if user_input is not None:
-            if not any(
+            panel = self._panel_entity()
+            panel_state = self.hass.states.get(panel) if panel else None
+            if panel_state is not None and panel_state.state != "disarmed":
+                # Z17 (30.10): the settings change only while disarmed.
+                errors["base"] = "not_disarmed"
+            elif not any(
                 user_input.get(key) for key in (CONF_ARM_AWAY, CONF_ARM_HOME, CONF_ARM_NIGHT)
             ):
                 errors["base"] = "no_mode"
@@ -95,6 +109,13 @@ class SmartServiceAlarmOptionsFlow(OptionsFlowWithReload):
                 options = {**DEFAULT_OPTIONS, **user_input}
                 for key in INT_OPTIONS:
                     options[key] = int(options[key])
+                changed = sorted(
+                    key for key in options if options[key] != current.get(key)
+                )
+                if changed:
+                    await events.async_fire(
+                        self.hass, panel, ACTION_OPTIONS, None, zmienione=changed
+                    )
                 return self.async_create_entry(data=options)
             current = {**current, **user_input}
 

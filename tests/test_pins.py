@@ -90,7 +90,7 @@ def test_lock_lengths() -> None:
 async def test_admin_sets_pins_for_everybody(hass, users, loaded) -> None:
     await give_pins(hass, users)
     manager = manager_of(loaded)
-    assert set(manager.pins) == {users.admin.id, users.osoba2.id, users.osoba3.id, users.tablet.id}
+    assert set(manager.pins) == {users.admin.id, users.piotr.id, users.adam.id, users.tablet.id}
     stored = json.dumps(manager.pins)
     for pin in ("2580", "1357", "8642", "9157"):
         assert pin not in stored
@@ -99,71 +99,71 @@ async def test_admin_sets_pins_for_everybody(hass, users, loaded) -> None:
 @pytest.mark.parametrize(("pin", "key"), [("12", "pin_format"), ("1111", "pin_trivial")])
 async def test_rules_refused(hass, users, loaded, pin, key) -> None:
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.admin, users.osoba2, pin)
+        await set_pin(hass, users.admin, users.piotr, pin)
     assert err.value.translation_key == key
-    assert not manager_of(loaded).has_pin(users.osoba2.id)
+    assert not manager_of(loaded).has_pin(users.piotr.id)
 
 
 async def test_unique_pins_admin_collision_not_counted(hass, users, loaded) -> None:
-    await set_pin(hass, users.admin, users.osoba2, "1357")
+    await set_pin(hass, users.admin, users.piotr, "1357")
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.admin, users.osoba3, "1357")
+        await set_pin(hass, users.admin, users.adam, "1357")
     assert err.value.translation_key == "pin_taken"
     manager = manager_of(loaded)
-    assert not manager.has_pin(users.osoba3.id)
+    assert not manager.has_pin(users.adam.id)
     assert manager.lockouts == {}
     # The same PIN again for its owner is not a collision.
-    await set_pin(hass, users.admin, users.osoba2, "1357")
+    await set_pin(hass, users.admin, users.piotr, "1357")
 
 
 async def test_user_sets_only_own_pin(hass, users, loaded) -> None:
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.osoba2, users.osoba3, "2468")
+        await set_pin(hass, users.piotr, users.adam, "2468")
     assert err.value.translation_key == "own_pin_only"
-    await set_pin(hass, users.osoba2, users.osoba2, "2468")
-    assert manager_of(loaded).has_pin(users.osoba2.id)
+    await set_pin(hass, users.piotr, users.piotr, "2468")
+    assert manager_of(loaded).has_pin(users.piotr.id)
 
 
 async def test_user_needs_current_pin(hass, users, loaded) -> None:
-    await set_pin(hass, users.osoba2, users.osoba2, "2468")
+    await set_pin(hass, users.piotr, users.piotr, "2468")
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.osoba2, users.osoba2, "3579")
+        await set_pin(hass, users.piotr, users.piotr, "3579")
     assert err.value.translation_key == "current_pin_required"
-    await set_pin(hass, users.osoba2, users.osoba2, "3579", current_pin="2468")
-    record = manager_of(loaded).pins[users.osoba2.id]
+    await set_pin(hass, users.piotr, users.piotr, "3579", current_pin="2468")
+    record = manager_of(loaded).pins[users.piotr.id]
     assert record_matches(record, "3579")
 
 
 async def test_g2_wrong_current_pin_counts(hass, users, loaded) -> None:
-    await set_pin(hass, users.osoba2, users.osoba2, "2468")
+    await set_pin(hass, users.piotr, users.piotr, "2468")
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.osoba2, users.osoba2, "3579", current_pin="1111")
+        await set_pin(hass, users.piotr, users.piotr, "3579", current_pin="1111")
     assert err.value.translation_key == "wrong_current_pin"
-    assert manager_of(loaded).lockouts[users.osoba2.id]["nieudane"] == 1
+    assert manager_of(loaded).lockouts[users.piotr.id]["nieudane"] == 1
 
 
 async def test_g2_user_collision_counts_and_locks(hass, users, loaded, scrypt_calls) -> None:
-    await set_pin(hass, users.admin, users.osoba3, "8642")
+    await set_pin(hass, users.admin, users.adam, "8642")
     for attempt in range(1, 5):
         with pytest.raises(ServiceValidationError) as err:
-            await set_pin(hass, users.osoba2, users.osoba2, "8642")
+            await set_pin(hass, users.piotr, users.piotr, "8642")
         assert err.value.translation_key == "pin_taken"
-        assert manager_of(loaded).lockouts[users.osoba2.id]["nieudane"] == attempt
+        assert manager_of(loaded).lockouts[users.piotr.id]["nieudane"] == attempt
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.osoba2, users.osoba2, "8642")
+        await set_pin(hass, users.piotr, users.piotr, "8642")
     assert err.value.translation_key == "locked_out"
 
     calls = scrypt_calls.calls
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, users.osoba2, users.osoba2, "9753")
+        await set_pin(hass, users.piotr, users.piotr, "9753")
     assert err.value.translation_key == "locked_out"
     assert scrypt_calls.calls == calls
-    assert not manager_of(loaded).has_pin(users.osoba2.id)
+    assert not manager_of(loaded).has_pin(users.piotr.id)
 
 
 async def test_set_pin_needs_user(hass, users, loaded) -> None:
     with pytest.raises(ServiceValidationError) as err:
-        await set_pin(hass, None, users.osoba2, "2468")
+        await set_pin(hass, None, users.piotr, "2468")
     assert err.value.translation_key == "user_required"
 
 
@@ -176,18 +176,18 @@ async def test_set_pin_unknown_user(hass, users, loaded) -> None:
 async def test_admin_clears_pin(hass, users, loaded) -> None:
     await give_pins(hass, users)
     with pytest.raises(ServiceValidationError) as err:
-        await service(hass, "clear_pin", users.osoba2, {"user_id": users.osoba3.id})
+        await service(hass, "clear_pin", users.piotr, {"user_id": users.adam.id})
     assert err.value.translation_key == "admin_required"
     with pytest.raises(ServiceValidationError) as err:
-        await service(hass, "clear_pin", None, {"user_id": users.osoba3.id})
+        await service(hass, "clear_pin", None, {"user_id": users.adam.id})
     assert err.value.translation_key == "user_required"
-    await service(hass, "clear_pin", users.admin, {"user_id": users.osoba3.id})
-    assert not manager_of(loaded).has_pin(users.osoba3.id)
+    await service(hass, "clear_pin", users.admin, {"user_id": users.adam.id})
+    assert not manager_of(loaded).has_pin(users.adam.id)
 
 
 async def test_deleted_user_pin_removed(hass, users, loaded) -> None:
     await give_pins(hass, users)
-    await hass.auth.async_remove_user(users.osoba3)
+    await hass.auth.async_remove_user(users.adam)
     await hass.async_block_till_done()
-    assert not manager_of(loaded).has_pin(users.osoba3.id)
-    assert manager_of(loaded).has_pin(users.osoba2.id)
+    assert not manager_of(loaded).has_pin(users.adam.id)
+    assert manager_of(loaded).has_pin(users.piotr.id)
