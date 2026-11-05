@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
@@ -14,19 +15,31 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Context, HomeAssistant, callback
+from homeassistant.const import (
+    EVENT_HOMEASSISTANT_STOP,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
+from homeassistant.core import Context, CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.event import (
+    async_track_point_in_utc_time,
+    async_track_time_interval,
+)
+from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
 
 from . import events
 from .const import (
     ACTION_ARM,
     ACTION_ARM_REFUSED,
+    ACTION_BACK,
     ACTION_DISARM,
+    ACTION_SENSOR_BYPASSED,
     ACTION_TRIGGER,
     ATTR_ARMED_BY_AUTOMATION,
+    ATTR_BYPASSED,
     ATTR_CHANGE_SOURCE,
     ATTR_COUNTDOWN_END,
     ATTR_MODE,
@@ -41,6 +54,7 @@ from .const import (
     CONF_SENSORS,
     CONF_TRIGGER_TIME,
     DEFAULT_OPTIONS,
+    MAX_TRIGGERS_PER_SENSOR,
     SOURCE_AUTOMATION,
     SOURCE_TRIGGER,
     SOURCE_USER,
@@ -69,6 +83,28 @@ S_CHANGED_BY = "changed_by"
 S_SOURCE = "zmiana_przez"
 S_SENSOR = "czujnik"
 S_END = "koniec"
+# Z25: the triggers of each sensor (name) since arming, and the bypassed
+# sensors already told.
+S_COUNTS = "wyzwolenia"
+S_BYPASSED = "pominiete"
+# Z21: the last moment the panel was known to run while it guarded.
+S_ALIVE = "zywy"
+
+# Z21: the states in which the panel guards (a break then is told).
+GUARDING = (
+    Alarm.ARMING,
+    Alarm.ARMED_AWAY,
+    Alarm.ARMED_HOME,
+    Alarm.ARMED_NIGHT,
+    Alarm.PENDING,
+    Alarm.TRIGGERED,
+)
+# Z21: how often the moment is written while the panel guards.
+ALIVE_EVERY = timedelta(minutes=1)
+# Z25: at most this many sensor names are counted in one arming.
+MAX_COUNTED = 100
+# A new arming, a disarming and a refused arming forget the counts.
+FRESH_COUNTS: dict[str, Any] = {S_COUNTS: {}, S_BYPASSED: []}
 
 
 async def async_setup_entry(
@@ -126,6 +162,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
             ATTR_TRIGGER_SENSOR: self._s.get(S_SENSOR),
             ATTR_MODE: self._s.get(S_MODE),
             ATTR_COUNTDOWN_END: self._s.get(S_END),
+            ATTR_BYPASSED: list(self._s.get(S_BYPASSED) or []),
         }
 
     def _end(self) -> datetime | None:
@@ -140,13 +177,62 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
     async def async_added_to_hass(self) -> None:
         """Restore the state saved before a restart and resume timers."""
         await super().async_added_to_hass()
+        now = dt_util.utcnow()
         self._s.setdefault(S_STATE, Alarm.DISARMED)
-        self._restore(dt_util.utcnow())
+        before = self._s.get(S_STATE)
+        minutes = self._break_minutes(now)
+        # Z21: only a start of Home Assistant is a break (a reload of the entry
+        # while it runs is not).
+        starting = self.hass.state is not CoreState.running
+        self._restore(now)
+        self._s[S_ALIVE] = now.isoformat()
         self._sync_attrs()
         await self._pins.async_save()
+        self.async_on_remove(
+            async_track_time_interval(self.hass, self._async_alive, ALIVE_EVERY)
+        )
+        self.async_on_remove(
+            self.hass.bus.async_listen(EVENT_HOMEASSISTANT_STOP, self._async_alive)
+        )
+        if starting and before in GUARDING:
+
+            async def _async_told(_hass: HomeAssistant) -> None:
+                await self._async_back(minutes, before)
+
+            self.async_on_remove(async_at_started(self.hass, _async_told))
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
+
+    def _break_minutes(self, now: datetime) -> int | None:
+        """Z21: the whole minutes since the last moment the panel was known to
+        run (at least 1); None when it is not known (the first start of this
+        version, or a clock that went back)."""
+        value = self._s.get(S_ALIVE)
+        alive = dt_util.parse_datetime(value) if isinstance(value, str) else None
+        if alive is None or alive > now:
+            return None
+        return max(1, math.ceil((now - alive).total_seconds() / 60))
+
+    async def _async_alive(self, _now: datetime | Event | None = None) -> None:
+        """Z21: the moment written while the panel guards (and at the stop)."""
+        if self._s.get(S_STATE) in GUARDING:
+            self._s[S_ALIVE] = dt_util.utcnow().isoformat()
+            await self._pins.async_save()
+
+    async def _async_back(self, minutes: int | None, before: str | None) -> None:
+        """Z21: Home Assistant runs again - the break told once, after its
+        start (the automations listen then)."""
+        await events.async_fire(
+            self.hass,
+            self.entity_id,
+            ACTION_BACK,
+            None,
+            tryb=self._s.get(S_MODE),
+            stan=self._s.get(S_STATE),
+            stan_przed=before,
+            przerwa_min=minutes,
+        )
 
     def _restore(self, now: datetime) -> None:
         state = self._s.get(S_STATE)
@@ -207,6 +293,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
                         S_CHANGED_BY: CHANGED_BY_AUTOMATION,
                         S_SOURCE: SOURCE_AUTOMATION,
                         S_SENSOR: None,
+                        **FRESH_COUNTS,
                     }
                 )
                 await events.async_fire(
@@ -239,6 +326,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
         self._cancel_timer()
         self._s.update(changes)
         self._s[S_END] = end.isoformat() if end else None
+        self._s[S_ALIVE] = dt_util.utcnow().isoformat()
         if end is not None:
             self._schedule(end)
         self._sync_attrs()
@@ -314,6 +402,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
             S_CHANGED_BY: await self._actor_name(owner_id, user_id),
             S_SOURCE: SOURCE_USER if (owner_id or user_id) else SOURCE_AUTOMATION,
             S_SENSOR: None,
+            **FRESH_COUNTS,
         }
         end = dt_util.utcnow() + timedelta(seconds=exit_delay) if exit_delay > 0 else None
         await self._async_apply(changes, end=end, context=context)
@@ -362,6 +451,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
                 else CHANGED_BY_AUTOMATION,
                 S_SOURCE: source,
                 S_SENSOR: None,
+                **FRESH_COUNTS,
             },
             context=context,
         )
@@ -393,6 +483,13 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
             # Disarmed, exit delay running, or already pending / triggered.
             _LOGGER.debug("Trigger ignored in state %s", state)
             return
+        counts = dict(self._s.get(S_COUNTS) or {})
+        if sensor:
+            if counts.get(sensor, 0) >= MAX_TRIGGERS_PER_SENSOR:
+                await self._async_bypass(sensor, context)
+                return
+            if sensor in counts or len(counts) < MAX_COUNTED:
+                counts[sensor] = counts.get(sensor, 0) + 1
         entry_delay = int(self._options[CONF_ENTRY_DELAY])
         now = dt_util.utcnow()
         changes = {
@@ -401,6 +498,7 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
             S_CHANGED_BY: await self._actor_name(None, user_id),
             S_SOURCE: SOURCE_TRIGGER,
             S_SENSOR: sensor,
+            S_COUNTS: counts,
         }
         end = now + (
             timedelta(seconds=entry_delay) if entry_delay > 0 else self._trigger_time()
@@ -414,4 +512,25 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
             caller_id=user_id,
             tryb=self._s.get(S_MODE),
             czujnik=sensor,
+        )
+
+    async def _async_bypass(self, sensor: str, context: Context | None) -> None:
+        """Z25: the sensor already triggered the alarm 3 times since arming -
+        bypassed until disarming; told once (the event and the logbook)."""
+        bypassed = list(self._s.get(S_BYPASSED) or [])
+        if sensor in bypassed:
+            _LOGGER.debug("Trigger of a bypassed sensor ignored")
+            return
+        bypassed.append(sensor)
+        self._s[S_BYPASSED] = bypassed
+        self.async_write_ha_state()
+        await self._pins.async_save()
+        await events.async_fire(
+            self.hass,
+            self.entity_id,
+            ACTION_SENSOR_BYPASSED,
+            context,
+            tryb=self._s.get(S_MODE),
+            czujnik=sensor,
+            wyzwolenia=MAX_TRIGGERS_PER_SENSOR,
         )

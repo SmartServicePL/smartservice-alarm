@@ -10,11 +10,13 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ACTION_ARM,
     ACTION_ARM_REFUSED,
+    ACTION_BACK,
     ACTION_DISARM,
     ACTION_LOCKOUT,
     ACTION_OPTIONS,
     ACTION_PIN_CLEARED,
     ACTION_PIN_SET,
+    ACTION_SENSOR_BYPASSED,
     ACTION_TRIGGER,
     ACTION_UNLOCK,
     ACTION_WRONG_CODE,
@@ -165,4 +167,19 @@ def describe(data: dict[str, Any], language: str | None) -> str:
         return f"Alarm settings changed: {changed}"
     if action == ACTION_PIN_CLEARED:
         return f"PIN usunięty: {who}" if polish else f"PIN removed: {who}"
+    if action == ACTION_SENSOR_BYPASSED:
+        sensor = data.get("czujnik") or "?"
+        count = data.get("wyzwolenia", "?")
+        if polish:
+            return f"Czujka pominięta do rozbrojenia: {sensor} ({count} alarmy z rzędu)"
+        return f"Sensor bypassed until disarming: {sensor} ({count} alarms in a row)"
+    if action == ACTION_BACK:
+        minutes = data.get("przerwa_min")
+        if polish:
+            if minutes:
+                return f"Alarm wrócił po {minutes} min przerwy"
+            return "Alarm wrócił po przerwie"
+        if minutes:
+            return f"Alarm back after a {minutes} min break"
+        return "Alarm back after a break"
     return str(action)

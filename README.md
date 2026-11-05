@@ -38,6 +38,19 @@ Flow: arm → `arming` (exit delay) → armed. A trigger while armed →
 `pending` (entry delay) → `triggered` (alarm duration) → back to the same
 armed mode. A trigger while disarmed or during the exit delay is ignored.
 
+**One sensor at most 3 alarms.** In one arming one sensor (the name passed to
+`smartservice_alarm.trigger`) triggers the alarm at most 3 times. Its next
+triggers are bypassed until disarming: the first one fires
+`czujka_pominieta` once and the sensor is listed in `czujniki_pominiete`.
+Other sensors keep triggering. Disarming and a new arming forget the count.
+
+**A break.** When Home Assistant starts again while the panel guarded (exit
+delay, armed, entry delay or alarm), the countdowns that ended meanwhile are
+caught up and, once Home Assistant has started, `powrot_po_przerwie` is fired
+with the break in minutes (`przerwa_min`; left out when not known). While it
+guards, the panel writes the moment it last ran every minute and at Home
+Assistant's stop. A reload of the entry is not a break.
+
 Extra attributes (never any PIN data):
 
 | Attribute | Meaning |
@@ -48,6 +61,7 @@ Extra attributes (never any PIN data):
 | `czujnik_wyzwalajacy` | sensor name passed to `smartservice_alarm.trigger` |
 | `tryb` | armed mode in effect or being armed |
 | `koniec_odliczania` | end of the running exit delay, entry delay or alarm (ISO) |
+| `czujniki_pominiete` | sensors bypassed until disarming after 3 alarms (names) |
 
 **Automation disarming at night.** A call without a user (an automation) may
 disarm without a PIN only when the panel is `armed_night`, that arming was made
@@ -98,7 +112,9 @@ key (`component.smartservice_alarm.exceptions.<key>.message`).
 Every action fires `smartservice_alarm_event` with `akcja` (`uzbrojenie`,
 `rozbrojenie`, `zly_kod`, `blokada`, `odblokowanie`, `wyzwolenie`,
 `pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` - a listed sensor open at
-the end of the exit delay, `ustawienia` - the options changed), the mode, the
+the end of the exit delay, `ustawienia` - the options changed,
+`czujka_pominieta` - a sensor bypassed after 3 alarms, `powrot_po_przerwie` -
+Home Assistant started again while the panel guarded), the mode, the
 PIN owner and the calling account (ids and names), the sensor name, attempt
 counters and the lockout end.
 The logbook shows it as text, for example *Disarmed: Piotr (from account:
