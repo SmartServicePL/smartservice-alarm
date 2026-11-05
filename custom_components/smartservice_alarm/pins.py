@@ -51,6 +51,15 @@ LEVEL_DECAY = timedelta(hours=24)
 _MAX_LEVEL = 16
 
 NO_ACCOUNT = "_bez_konta"
+# Z29 (30.10): one counter for the whole panel - several accounts give no more
+# tries: GLOBAL_FAILURES wrong codes from at least two accounts within
+# GLOBAL_WINDOW lock every account except the administrators for GLOBAL_LOCK
+# (an administrator's unlock ends it; one account alone has its own, stricter
+# lock).
+WHOLE_PANEL = "_cala_centrala"
+GLOBAL_FAILURES = 15
+GLOBAL_WINDOW = timedelta(minutes=15)
+GLOBAL_LOCK = timedelta(minutes=15)
 
 KEY_PINS = "piny"
 KEY_LOCKOUTS = "blokady"
@@ -178,8 +187,34 @@ class LockoutBook:
         return attempt, until
 
     def unlock(self, bucket: str) -> bool:
-        """Administrator unlock: forget the account's wrong codes and level."""
-        return self.data.pop(bucket, None) is not None
+        """Administrator unlock: forget the account's wrong codes and level
+        (and the whole panel's lock, Z29)."""
+        whole = self.data.pop(WHOLE_PANEL, None) is not None
+        return self.data.pop(bucket, None) is not None or whole
+
+    def register_panel_failure(self, bucket: str, now: datetime) -> datetime | None:
+        """Z29: count a wrong code of any account; a new whole-panel lock end."""
+        entry = self.data.setdefault(WHOLE_PANEL, {"bledy": [], "do": None})
+        recent = [
+            [str(item[0]), str(item[1])]
+            for item in entry.get("bledy") or []
+            if isinstance(item, list)
+            and len(item) == 2
+            and (moment := dt_util.parse_datetime(str(item[0]))) is not None
+            and now - moment < GLOBAL_WINDOW
+        ]
+        recent.append([now.isoformat(), bucket])
+        accounts = {item[1] for item in recent}
+        if (
+            self.locked_until(WHOLE_PANEL, now) is None
+            and len(recent) >= GLOBAL_FAILURES
+            and len(accounts) >= 2
+        ):
+            until = now + GLOBAL_LOCK
+            entry.update({"bledy": [], "do": until.isoformat()})
+            return until
+        entry["bledy"] = recent[-GLOBAL_FAILURES:]
+        return None
 
 
 def lockout_error(until: datetime) -> ServiceValidationError:
@@ -245,7 +280,7 @@ class PinManager:
                 del self.pins[user_id]
                 changed = True
         for bucket in list(self.lockouts):
-            if bucket != NO_ACCOUNT and bucket not in known:
+            if bucket not in (NO_ACCOUNT, WHOLE_PANEL) and bucket not in known:
                 del self.lockouts[bucket]
                 changed = True
         return changed
@@ -280,7 +315,9 @@ class PinManager:
         self, bucket: str, key: str, context: Context | None
     ) -> ServiceValidationError:
         """Count a failed attempt, log it and return the error to raise."""
-        attempt, until = self.book.register_failure(bucket, dt_util.utcnow())
+        now = dt_util.utcnow()
+        attempt, until = self.book.register_failure(bucket, now)
+        whole_until = self.book.register_panel_failure(bucket, now)
         await self.async_save()
         caller = None if bucket == NO_ACCOUNT else bucket
         entity_id = self._entity_id()
@@ -293,6 +330,16 @@ class PinManager:
             proby=attempt,
             limit=MAX_FAILURES,
         )
+        if whole_until is not None:
+            await events.async_fire(
+                self.hass,
+                entity_id,
+                ACTION_LOCKOUT,
+                context,
+                caller_id=caller,
+                do=whole_until.isoformat(),
+                cala_centrala=True,
+            )
         if until is not None:
             await events.async_fire(
                 self.hass,
@@ -305,12 +352,22 @@ class PinManager:
             return lockout_error(until)
         return alarm_error(key)
 
+    async def _async_raise_if_panel_locked(self, bucket: str) -> None:
+        """Z29: the whole panel locked - every account but an administrator."""
+        until = self.locked_until(WHOLE_PANEL)
+        if until is None:
+            return
+        user = None if bucket == NO_ACCOUNT else await self.hass.auth.async_get_user(bucket)
+        if user is None or not user.is_admin:
+            raise lockout_error(until)
+
     async def async_check_code(
         self, bucket: str, code: str, context: Context | None
     ) -> str:
         """Return the owner of the code or raise; counts wrong codes."""
         async with self._lock:
             self._raise_if_locked(bucket)
+            await self._async_raise_if_panel_locked(bucket)
             owners = await self._async_owners(code)
             if len(owners) == 1:
                 # A correct code does not clear the wrong-code streak; it
@@ -338,6 +395,7 @@ class PinManager:
         async with self._lock:
             if not admin:
                 self._raise_if_locked(bucket)
+                await self._async_raise_if_panel_locked(bucket)
             if (problem := pin_problem(pin)) is not None:
                 raise alarm_error(problem)
             check_current = not admin and target_id in self.pins

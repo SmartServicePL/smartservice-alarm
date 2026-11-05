@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 from . import events
 from .const import (
     ACTION_ARM,
+    ACTION_ARM_REFUSED,
     ACTION_DISARM,
     ACTION_TRIGGER,
     ATTR_ARMED_BY_AUTOMATION,
@@ -192,6 +193,32 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
         state = self._s.get(S_STATE)
         mode = self._s.get(S_MODE)
         if state == Alarm.ARMING:
+            # Z13: the end of the exit delay is the last moment of arming - a
+            # listed sensor open or without a reading: disarmed again, with the
+            # reason in the log.
+            opened, missing = self._sensor_problems()
+            if opened or missing:
+                await self._async_apply(
+                    {
+                        S_STATE: Alarm.DISARMED,
+                        S_MODE: None,
+                        S_BY_AUTOMATION: False,
+                        S_ALARM_SINCE_ARMING: False,
+                        S_CHANGED_BY: CHANGED_BY_AUTOMATION,
+                        S_SOURCE: SOURCE_AUTOMATION,
+                        S_SENSOR: None,
+                    }
+                )
+                await events.async_fire(
+                    self.hass,
+                    self.entity_id,
+                    ACTION_ARM_REFUSED,
+                    None,
+                    tryb=mode,
+                    otwarte=opened or None,
+                    brak_odczytu=missing or None,
+                )
+                return
             await self._async_apply({S_STATE: mode})
         elif state == Alarm.PENDING:
             await self._async_apply(
@@ -226,8 +253,8 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
         name = await events.async_user_name(self.hass, owner_id or user_id)
         return name or CHANGED_BY_AUTOMATION
 
-    def _check_sensors(self) -> None:
-        """Refuse arming when a listed sensor is open or has no reading."""
+    def _sensor_problems(self) -> tuple[list[str], list[str]]:
+        """The listed sensors open now and those without a reading (names)."""
         opened: list[str] = []
         missing: list[str] = []
         for entity_id in self._options.get(CONF_SENSORS) or []:
@@ -236,6 +263,11 @@ class SmartServiceAlarmPanel(AlarmControlPanelEntity):
                 missing.append(state.name if state else entity_id)
             elif state.state == STATE_ON:
                 opened.append(state.name)
+        return opened, missing
+
+    def _check_sensors(self) -> None:
+        """Refuse arming when a listed sensor is open or has no reading."""
+        opened, missing = self._sensor_problems()
         if opened:
             raise alarm_error("sensors_open", czujniki=", ".join(opened))
         if missing:

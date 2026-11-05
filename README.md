@@ -7,6 +7,8 @@ and writes every action to the logbook — never the PIN itself.
 
 [Polski opis — README_PL.md](README_PL.md)
 
+> Smart Service Alarm jest projektowany według zasad PN-EN 50131 (stopień 2), ale nie jest certyfikowaną centralą alarmową. Nie zastępuje profesjonalnego systemu alarmowego ani monitoringu agencji ochrony.
+
 - Free and open source (MIT), works on its own.
 - Configured only from the user interface (no YAML).
 - English and Polish.
@@ -59,7 +61,7 @@ disarm without a PIN is refused.
 | Modes: away / home / night | all on |
 | Exit delay | 60 s |
 | Entry delay | 30 s |
-| Alarm duration, then back to armed | 30 min |
+| Alarm duration, then back to armed | 10 min |
 | PIN required for arming | off |
 | Sensors checked when arming | none |
 
@@ -95,10 +97,12 @@ key (`component.smartservice_alarm.exceptions.<key>.message`).
 
 Every action fires `smartservice_alarm_event` with `akcja` (`uzbrojenie`,
 `rozbrojenie`, `zly_kod`, `blokada`, `odblokowanie`, `wyzwolenie`,
-`pin_ustawiony`, `pin_usuniety`), the mode, the PIN owner and the calling
-account (ids and names), the sensor name, attempt counters and the lockout end.
-The logbook shows it as text, for example *Disarmed: Anna (from account:
-Living room tablet)* or *Wrong PIN from account Anna (3/5)*.
+`pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` - a listed sensor open at
+the end of the exit delay, `ustawienia` - the options changed), the mode, the
+PIN owner and the calling account (ids and names), the sensor name, attempt
+counters and the lockout end.
+The logbook shows it as text, for example *Disarmed: Piotr (from account:
+Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
 
 ## Security model
 

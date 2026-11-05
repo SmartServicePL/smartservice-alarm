@@ -7,6 +7,8 @@ błędnych PIN-ach i zapisuje każdą czynność w dzienniku — nigdy sam PIN.
 
 [English description — README.md](README.md)
 
+> Smart Service Alarm jest projektowany według zasad PN-EN 50131 (stopień 2), ale nie jest certyfikowaną centralą alarmową. Nie zastępuje profesjonalnego systemu alarmowego ani monitoringu agencji ochrony.
+
 - Darmowa, otwarta (MIT), działa samodzielnie.
 - Konfiguracja tylko z interfejsu (bez YAML).
 - Po polsku i po angielsku.
@@ -62,7 +64,7 @@ odrzucane.
 | Tryby: poza domem / w domu / noc | wszystkie włączone |
 | Opóźnienie wyjścia | 60 s |
 | Opóźnienie wejścia | 30 s |
-| Czas trwania alarmu, potem powrót do uzbrojenia | 30 min |
+| Czas trwania alarmu, potem powrót do uzbrojenia | 10 min |
 | PIN wymagany do uzbrojenia | nie |
 | Czujniki sprawdzane przy uzbrojeniu | brak |
 
@@ -100,10 +102,11 @@ pokazać komunikat po polsku, tłumaczy klucz
 
 Każda czynność wysyła zdarzenie `smartservice_alarm_event` z polem `akcja`
 (`uzbrojenie`, `rozbrojenie`, `zly_kod`, `blokada`, `odblokowanie`,
-`wyzwolenie`, `pin_ustawiony`, `pin_usuniety`), trybem, właścicielem PIN-u i
-kontem wywołującym (id i imiona), nazwą czujnika, licznikiem prób i końcem
-blokady. Dziennik pokazuje je jako tekst, np. „Rozbrojenie: Zbigniew (z konta:
-Tablet salon)”, „Błędny PIN z konta Zbigniew (3/5)”, „Blokada konta Zbigniew
+`wyzwolenie`, `pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` — otwarty
+czujnik na końcu czasu na wyjście, `ustawienia` — zmiana ustawień centrali),
+trybem, właścicielem PIN-u i kontem wywołującym (id i imiona), nazwą czujnika,
+licznikiem prób i końcem blokady. Dziennik pokazuje je jako tekst, np. „Rozbrojenie: Jan (z konta:
+Tablet salon)”, „Błędny PIN z konta Jan (3/5)”, „Blokada konta Jan
 do 18:05”, „Alarm: drzwi ogrodowe”.
 
 ## Model bezpieczeństwa

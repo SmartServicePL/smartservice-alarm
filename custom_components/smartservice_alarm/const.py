@@ -26,7 +26,8 @@ DEFAULT_OPTIONS: Final = {
     CONF_ARM_NIGHT: True,
     CONF_EXIT_DELAY: 60,
     CONF_ENTRY_DELAY: 30,
-    CONF_TRIGGER_TIME: 30,
+    # Z26 (30.10): 10 minutes for a new entry (the sirens sound their own time).
+    CONF_TRIGGER_TIME: 10,
     CONF_CODE_ARM_REQUIRED: False,
     CONF_SENSORS: [],
 }
@@ -65,3 +66,8 @@ ACTION_UNLOCK: Final = "odblokowanie"
 ACTION_TRIGGER: Final = "wyzwolenie"
 ACTION_PIN_SET: Final = "pin_ustawiony"
 ACTION_PIN_CLEARED: Final = "pin_usuniety"
+# Z13 (30.10): at the end of the exit delay a listed sensor was open or had
+# no reading - the panel went back to disarmed.
+ACTION_ARM_REFUSED: Final = "odmowa_uzbrojenia"
+# Z17 (30.10): the options changed (only while disarmed).
+ACTION_OPTIONS: Final = "ustawienia"

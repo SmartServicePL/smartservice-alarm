@@ -9,8 +9,10 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ACTION_ARM,
+    ACTION_ARM_REFUSED,
     ACTION_DISARM,
     ACTION_LOCKOUT,
+    ACTION_OPTIONS,
     ACTION_PIN_CLEARED,
     ACTION_PIN_SET,
     ACTION_TRIGGER,
@@ -18,6 +20,30 @@ from .const import (
     ACTION_WRONG_CODE,
     EVENT_ALARM,
 )
+
+# Z17: the options' names in the logbook.
+OPTION_NAMES = {
+    "pl": {
+        "arm_away": "tryb poza domem",
+        "arm_home": "tryb w domu",
+        "arm_night": "tryb nocny",
+        "exit_delay": "czas na wyjście",
+        "entry_delay": "czas zwłoki",
+        "trigger_time": "czas trwania alarmu",
+        "code_arm_required": "PIN przy uzbrajaniu",
+        "sensors": "czujniki sprawdzane przy uzbrojeniu",
+    },
+    "en": {
+        "arm_away": "away mode",
+        "arm_home": "home mode",
+        "arm_night": "night mode",
+        "exit_delay": "exit delay",
+        "entry_delay": "entry delay",
+        "trigger_time": "alarm duration",
+        "code_arm_required": "PIN for arming",
+        "sensors": "sensors checked when arming",
+    },
+}
 
 MODE_NAMES = {
     "pl": {
@@ -117,6 +143,26 @@ def describe(data: dict[str, Any], language: str | None) -> str:
         return "Alarm: wyzwolenie" if polish else "Alarm: triggered"
     if action == ACTION_PIN_SET:
         return f"PIN ustawiony: {who}" if polish else f"PIN set: {who}"
+    if action == ACTION_ARM_REFUSED:
+        opened = ", ".join(data.get("otwarte") or [])
+        missing = ", ".join(data.get("brak_odczytu") or [])
+        if polish:
+            parts = [
+                f"Zamknij: {opened}" if opened else "",
+                f"Brak odczytu: {missing}" if missing else "",
+            ]
+            return "Nieuzbrojony po czasie na wyjście — " + ". ".join(p for p in parts if p)
+        parts = [
+            f"Close: {opened}" if opened else "",
+            f"No reading: {missing}" if missing else "",
+        ]
+        return "Not armed after the exit delay — " + ". ".join(p for p in parts if p)
+    if action == ACTION_OPTIONS:
+        option_names = OPTION_NAMES["pl" if polish else "en"]
+        changed = ", ".join(option_names.get(k, k) for k in data.get("zmienione") or [])
+        if polish:
+            return f"Ustawienia alarmu zmienione: {changed}"
+        return f"Alarm settings changed: {changed}"
     if action == ACTION_PIN_CLEARED:
         return f"PIN usunięty: {who}" if polish else f"PIN removed: {who}"
     return str(action)
