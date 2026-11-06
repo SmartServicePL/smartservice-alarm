@@ -20,7 +20,13 @@ from homeassistant.components.recorder.util import session_scope
 from homeassistant.core import HomeAssistant
 
 from custom_components.smartservice_alarm import pins as pins_module
-from custom_components.smartservice_alarm.const import WS_CHECK_PIN
+from custom_components.smartservice_alarm.const import (
+    WS_ARM,
+    WS_CHECK_PIN,
+    WS_CLEAR_PIN,
+    WS_DISARM,
+    WS_SET_PIN,
+)
 
 from .conftest import make_entry, set_pin
 
@@ -30,6 +36,10 @@ WRONG = "4826"
 @pytest.fixture
 def mock_recorder_before_hass(async_test_recorder) -> None:
     """The recorder (in-memory SQLite) starts before Home Assistant."""
+
+
+def entry_entity(hass: HomeAssistant) -> str:
+    return "alarm_control_panel.dom"
 
 
 def _alone(pin: str) -> re.Pattern[str]:
@@ -47,7 +57,7 @@ def _database_text(hass: HomeAssistant) -> str:
 async def test_nothing_with_the_pin_reaches_the_recorder(
     recorder_mock, hass, users, hass_ws_client
 ) -> None:
-    entry = make_entry(hass)
+    entry = make_entry(hass, exit_delay=0, entry_delay=0)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     # PINs set straight in the integration: set_pin is an action, so its PIN
@@ -65,9 +75,21 @@ async def test_nothing_with_the_pin_reaches_the_recorder(
     refresh = await hass.auth.async_create_refresh_token(users.piotr, CLIENT_ID)
     client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
 
-    for pin in (pins["piotr"], *[WRONG] * 5):
+    for pin in (pins["piotr"], *[WRONG] * 4):
         await client.send_json_auto_id({"type": WS_CHECK_PIN, "pin": pin})
         assert (await client.receive_json())["success"] is True
+    # 1.4.0: arming, disarming and the PINs go the same way.
+    refresh = await hass.auth.async_create_refresh_token(users.admin, CLIENT_ID)
+    admin = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    for sender, message in (
+        (admin, {"type": WS_SET_PIN, "user_id": users.tablet.id, "pin": "2468"}),
+        (client, {"type": WS_ARM, "tryb": "away", "code": "8642"}),
+        (client, {"type": WS_DISARM, "code": "2468"}),
+        (admin, {"type": WS_CLEAR_PIN, "user_id": users.tablet.id}),
+    ):
+        await sender.send_json_auto_id(message)
+        assert (await sender.receive_json())["success"] is True, message
+    assert hass.states.get(entry_entity(hass)).attributes["changed_by"] == "Tablet salon"
     # Control: a PIN given to a service does reach the database - the reason
     # why the entry check is a websocket command.
     await set_pin(hass, users.admin, users.adam, "3691")
@@ -77,6 +99,6 @@ async def test_nothing_with_the_pin_reaches_the_recorder(
     # The entry events themselves are recorded (the logbook shows them).
     assert "wejscie_bezpieczenstwo" in text
     assert _alone("3691").search(text)
-    for pin in (pins["piotr"], WRONG):
-        assert not _alone(pin).search(text)
+    for pin in (pins["piotr"], WRONG, "8642", "2468"):
+        assert not _alone(pin).search(text), pin
     assert pins_module.pin_problem(WRONG) is None

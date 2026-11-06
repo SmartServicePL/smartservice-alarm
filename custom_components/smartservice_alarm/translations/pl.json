@@ -4,17 +4,23 @@
     "step": {
       "user": {
         "title": "Smart Service Alarm",
-        "description": "Tworzy centralę alarmu z osobnym PIN-em dla każdego użytkownika. Tryby, opóźnienia i czujniki sprawdzane przy uzbrojeniu ustawisz później w opcjach.",
+        "description": "Tworzy centralę alarmu z osobnym PIN-em dla każdego użytkownika - albo same osobne PIN-y, bez centrali (np. do ochrony widoku w panelu w domu bez tego alarmu). Tryby, opóźnienia i czujniki sprawdzane przy uzbrojeniu ustawisz później w opcjach.",
         "data": {
-          "name": "Nazwa"
+          "name": "Nazwa",
+          "rodzaj": "Rodzaj"
         },
         "data_description": {
-          "name": "Nazwa centrali alarmu, np. Dom."
+          "name": "Nazwa centrali alarmu, np. Dom.",
+          "rodzaj": "Centrala alarmu z PIN-ami albo same PIN-y (bez centrali; centralę można włączyć później w opcjach, PIN-y zostają)."
         }
       }
     },
     "error": {
       "empty_name": "Podaj nazwę."
+    },
+    "abort": {
+      "pins_only_exists": "Smart Service Alarm już przechowuje PIN-y bez centrali. Żeby dodać centralę, włącz ją w opcjach tego wpisu - PIN-y zostaną.",
+      "panel_keeps_pins": "Centrala Smart Service Alarm jest już skonfigurowana i przechowuje PIN-y."
     }
   },
   "options": {
@@ -38,11 +44,26 @@
           "code_arm_required": "Wyłączone: uzbrojenie bez PIN-u jest dozwolone (np. z automatyzacji). Podany PIN zawsze musi być poprawny.",
           "sensors": "Uzbrojenie jest odrzucane, gdy któryś z tych czujników jest otwarty albo nie ma odczytu."
         }
+      },
+      "piny": {
+        "title": "Same PIN-y",
+        "description": "Ten wpis przechowuje tylko PIN-y użytkowników, bez centrali alarmu. Włącz centralę, żeby uzbrajać i rozbrajać tymi PIN-ami; PIN-y zostaną.",
+        "data": {
+          "centrala": "Włącz centralę alarmu"
+        }
       }
     },
     "error": {
       "no_mode": "Włącz co najmniej jeden tryb.",
       "not_disarmed": "Zmień ustawienia po rozbrojeniu alarmu."
+    }
+  },
+  "selector": {
+    "rodzaj": {
+      "options": {
+        "centrala": "Centrala alarmu z PIN-ami",
+        "piny": "Same PIN-y (bez centrali)"
+      }
     }
   },
   "exceptions": {

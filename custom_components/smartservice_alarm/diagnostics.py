@@ -20,6 +20,7 @@ async def async_get_config_entry_diagnostics(
     """Options, panel state, PIN metadata and lockouts; secrets redacted."""
     manager: PinManager = entry.runtime_data
     return {
+        "rodzaj": dict(entry.data).get("rodzaj", "centrala"),
         "options": dict(entry.options),
         "stan": deepcopy(manager.state),
         "piny": async_redact_data(deepcopy(manager.pins), TO_REDACT),

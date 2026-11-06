@@ -25,13 +25,18 @@ from .const import (
     CONF_CODE_ARM_REQUIRED,
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
+    CONF_KIND,
     CONF_NAME,
+    CONF_PANEL_ON,
     CONF_SENSORS,
     CONF_TRIGGER_TIME,
     DEFAULT_NAME,
     DEFAULT_OPTIONS,
     DOMAIN,
+    KIND_PANEL,
+    KIND_PINS,
 )
+from .pins import pins_only
 
 INT_OPTIONS = (CONF_EXIT_DELAY, CONF_ENTRY_DELAY, CONF_TRIGGER_TIME)
 
@@ -48,18 +53,39 @@ def _number(maximum: int, unit: str) -> selector.NumberSelector:
     )
 
 
+KIND_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[KIND_PANEL, KIND_PINS],
+        translation_key=CONF_KIND,
+        mode=selector.SelectSelectorMode.LIST,
+    )
+)
+
+
 class SmartServiceAlarmConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Single step: the name of the alarm."""
+    """Single step: the name and the kind (alarm panel or only PINs)."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        existing = self._async_current_entries()
+        if any(pins_only(entry.data) for entry in existing):
+            # One place for the PINs: the entry with only PINs becomes the
+            # alarm panel in its options, keeping them.
+            return self.async_abort(reason="pins_only_exists")
         errors: dict[str, str] = {}
         if user_input is not None:
             name = str(user_input[CONF_NAME]).strip()
+            only_pins = user_input.get(CONF_KIND) == KIND_PINS
+            if only_pins and existing:
+                return self.async_abort(reason="panel_keeps_pins")
             if name:
+                if only_pins:
+                    return self.async_create_entry(
+                        title=name, data={CONF_NAME: name, CONF_KIND: KIND_PINS}
+                    )
                 return self.async_create_entry(
                     title=name,
                     data={CONF_NAME: name},
@@ -69,7 +95,10 @@ class SmartServiceAlarmConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
-                {vol.Required(CONF_NAME, default=DEFAULT_NAME): selector.TextSelector()}
+                {
+                    vol.Required(CONF_NAME, default=DEFAULT_NAME): selector.TextSelector(),
+                    vol.Required(CONF_KIND, default=KIND_PANEL): KIND_SELECTOR,
+                }
             ),
             errors=errors,
         )
@@ -93,6 +122,8 @@ class SmartServiceAlarmOptionsFlow(OptionsFlowWithReload):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        if pins_only(self.config_entry.data):
+            return await self.async_step_piny(user_input)
         errors: dict[str, str] = {}
         current = {**DEFAULT_OPTIONS, **self.config_entry.options}
         if user_input is not None:
@@ -144,3 +175,26 @@ class SmartServiceAlarmOptionsFlow(OptionsFlowWithReload):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+    async def async_step_piny(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """An entry with only PINs: turn on the alarm panel (the PINs stay).
+
+        One way only - a panel never goes back to only PINs (its automations
+        and dashboards would lose the panel).
+        """
+        if user_input is not None:
+            if not user_input.get(CONF_PANEL_ON):
+                return self.async_create_entry(data=dict(self.config_entry.options))
+            data = {
+                key: value
+                for key, value in self.config_entry.data.items()
+                if key != CONF_KIND
+            }
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+            return self.async_create_entry(data={**DEFAULT_OPTIONS, CONF_SENSORS: []})
+        return self.async_show_form(
+            step_id="piny",
+            data_schema=vol.Schema({vol.Required(CONF_PANEL_ON, default=False): bool}),
+        )
