@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
 import hmac
@@ -26,7 +27,14 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import events
-from .const import ACTION_LOCKOUT, ACTION_WRONG_CODE, DOMAIN, STORAGE_VERSION
+from .const import (
+    ACTION_ENTRY,
+    ACTION_ENTRY_FAILED,
+    ACTION_LOCKOUT,
+    ACTION_WRONG_CODE,
+    DOMAIN,
+    STORAGE_VERSION,
+)
 
 # Production scrypt parameters for new PINs. Each stored PIN keeps the
 # parameters it was hashed with, so raising them later does not break
@@ -217,6 +225,23 @@ class LockoutBook:
         return None
 
 
+@dataclass(frozen=True)
+class EntryCheck:
+    """Result of the PIN check at the entry to "Security" (never the PIN)."""
+
+    owner_id: str | None = None
+    owner_name: str | None = None
+    remaining: int | None = None
+    locked_until: datetime | None = None
+
+    def as_response(self) -> dict[str, Any]:
+        if self.locked_until is not None:
+            return {"wynik": "zablokowany", "do": self.locked_until.isoformat()}
+        if self.owner_id is not None:
+            return {"wynik": "poprawny", "user_id": self.owner_id, "osoba": self.owner_name}
+        return {"wynik": "niepoprawny", "pozostalo": self.remaining}
+
+
 def lockout_error(until: datetime) -> ServiceValidationError:
     """Lockout message with the local time from which a new try is possible."""
     local = dt_util.as_local(until)
@@ -311,10 +336,10 @@ class PinManager:
         if (until := self.locked_until(bucket)) is not None:
             raise lockout_error(until)
 
-    async def _async_fail(
-        self, bucket: str, key: str, context: Context | None
-    ) -> ServiceValidationError:
-        """Count a failed attempt, log it and return the error to raise."""
+    async def _async_count_failure(
+        self, bucket: str, context: Context | None, action: str
+    ) -> tuple[int, datetime | None]:
+        """Count a failed attempt and log it; the attempt and a new lockout end."""
         now = dt_util.utcnow()
         attempt, until = self.book.register_failure(bucket, now)
         whole_until = self.book.register_panel_failure(bucket, now)
@@ -324,7 +349,7 @@ class PinManager:
         await events.async_fire(
             self.hass,
             entity_id,
-            ACTION_WRONG_CODE,
+            action,
             context,
             caller_id=caller,
             proby=attempt,
@@ -349,17 +374,70 @@ class PinManager:
                 caller_id=caller,
                 do=until.isoformat(),
             )
+        return attempt, until
+
+    async def _async_fail(
+        self, bucket: str, key: str, context: Context | None
+    ) -> ServiceValidationError:
+        """Count a failed attempt, log it and return the error to raise."""
+        _, until = await self._async_count_failure(bucket, context, ACTION_WRONG_CODE)
+        if until is not None:
             return lockout_error(until)
         return alarm_error(key)
 
-    async def _async_raise_if_panel_locked(self, bucket: str) -> None:
-        """Z29: the whole panel locked - every account but an administrator."""
+    async def _async_panel_lock_end(self, bucket: str) -> datetime | None:
+        """Z29: end of the whole panel's lock, unless the caller is an administrator."""
         until = self.locked_until(WHOLE_PANEL)
         if until is None:
-            return
+            return None
         user = None if bucket == NO_ACCOUNT else await self.hass.auth.async_get_user(bucket)
         if user is None or not user.is_admin:
+            return until
+        return None
+
+    async def _async_raise_if_panel_locked(self, bucket: str) -> None:
+        """Z29: the whole panel locked - every account but an administrator."""
+        if (until := await self._async_panel_lock_end(bucket)) is not None:
             raise lockout_error(until)
+
+    async def _async_lock_end(self, bucket: str) -> datetime | None:
+        """The lock that stops this account now: its own or the whole panel's."""
+        return self.locked_until(bucket) or await self._async_panel_lock_end(bucket)
+
+    async def async_check_entry(
+        self, bucket: str, code: str, context: Context | None
+    ) -> EntryCheck:
+        """PIN check at the entry to "Security".
+
+        The same counters and locks as arming with a PIN, and nothing else
+        changes (no state, no attribute). A wrong PIN or a lock is a result
+        for the card, not an error.
+        """
+        async with self._lock:
+            if (until := await self._async_lock_end(bucket)) is not None:
+                # Locked: the PIN is not even hashed.
+                return EntryCheck(locked_until=until)
+            owners = await self._async_owners(code)
+            if len(owners) == 1:
+                owner = owners[0]
+                await events.async_fire(
+                    self.hass,
+                    self._entity_id(),
+                    ACTION_ENTRY,
+                    context,
+                    owner_id=owner,
+                    caller_id=None if bucket == NO_ACCOUNT else bucket,
+                )
+                return EntryCheck(
+                    owner_id=owner,
+                    owner_name=await events.async_user_name(self.hass, owner),
+                )
+            attempt, _ = await self._async_count_failure(
+                bucket, context, ACTION_ENTRY_FAILED
+            )
+            if (until := await self._async_lock_end(bucket)) is not None:
+                return EntryCheck(locked_until=until)
+            return EntryCheck(remaining=max(MAX_FAILURES - attempt, 1))
 
     async def async_check_code(
         self, bucket: str, code: str, context: Context | None

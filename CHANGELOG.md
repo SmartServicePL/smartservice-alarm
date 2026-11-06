@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+- New websocket command `smartservice_alarm/check_pin` (`pin`, optional
+  `entity_id`) for a dashboard card's PIN-protected view: it answers
+  `{"wynik": "poprawny", "user_id", "osoba"}`,
+  `{"wynik": "niepoprawny", "pozostalo"}` or
+  `{"wynik": "zablokowany", "do"}`. Wrong PINs count together with arming
+  (the same account and whole-panel locks); it changes nothing else.
+  A websocket command and not an action, so the PIN never goes into a
+  `call_service` event or the recorder's database.
+- Logbook: `wejscie_bezpieczenstwo` (*Piotr: entered Security*) and
+  `wejscie_bezpieczenstwo_nieudane` (*Failed attempt to enter Security*,
+  without a name).
+
 ## 1.2.0
 
 - One sensor triggers the alarm at most 3 times in one arming. Its next

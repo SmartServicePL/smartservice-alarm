@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant.auth import EVENT_USER_REMOVED
 from homeassistant.auth.models import User
+from homeassistant.components import websocket_api
 from homeassistant.components.alarm_control_panel import DOMAIN as ALARM_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
@@ -19,6 +20,7 @@ from homeassistant.core import (
     SupportsResponse,
     callback,
 )
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.service import async_register_platform_entity_service
 from homeassistant.helpers.typing import ConfigType
@@ -38,6 +40,7 @@ from .const import (
     SERVICE_STATUS,
     SERVICE_TRIGGER,
     SERVICE_UNLOCK,
+    WS_CHECK_PIN,
 )
 from .pins import NO_ACCOUNT, PinManager, alarm_error
 
@@ -61,9 +64,58 @@ STATUS_SCHEMA = vol.Schema(_TARGET)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's actions."""
+    """Register the integration's actions and its websocket command."""
     _async_register_services(hass)
+    websocket_api.async_register_command(hass, websocket_check_pin)
     return True
+
+
+def _entry_pin(value: Any) -> str:
+    """The PIN as text.
+
+    Any other value is checked as given and so counts as a wrong PIN. The
+    schema itself never refuses it, because Home Assistant logs a refused
+    websocket message together with the refused value.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): WS_CHECK_PIN,
+        vol.Required("pin"): object,
+        vol.Optional(ATTR_ENTITY_ID): object,
+    }
+)
+@websocket_api.async_response
+async def websocket_check_pin(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """PIN check at the entry to the panel's "Security" view.
+
+    A websocket command, not a service: a service call's data goes into a
+    call_service event and so into the recorder's database. Nothing here
+    changes the alarm; wrong PINs count together with arming.
+    """
+    entity_id = msg.get(ATTR_ENTITY_ID)
+    try:
+        if entity_id is not None and not isinstance(entity_id, str):
+            raise alarm_error("unknown_alarm")
+        entry = _async_entry_for(hass, entity_id)
+    except ServiceValidationError as err:
+        key = err.translation_key or "unknown_alarm"
+        connection.send_error(msg["id"], key, key)
+        return
+    result = await entry.runtime_data.async_check_entry(
+        connection.user.id, _entry_pin(msg["pin"]), connection.context(msg)
+    )
+    connection.send_result(msg["id"], result.as_response())
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: AlarmConfigEntry) -> bool:
@@ -109,10 +161,16 @@ async def _async_caller(hass: HomeAssistant, call: ServiceCall, *, admin: bool) 
 @callback
 def _async_entry(hass: HomeAssistant, call: ServiceCall) -> AlarmConfigEntry:
     """Alarm entry addressed by the call (entity_id or the only one)."""
+    return _async_entry_for(hass, call.data.get(ATTR_ENTITY_ID))
+
+
+@callback
+def _async_entry_for(hass: HomeAssistant, entity_id: str | None) -> AlarmConfigEntry:
+    """Alarm entry of the entity_id, or the only one."""
     entries = {
         entry.entry_id: entry for entry in hass.config_entries.async_loaded_entries(DOMAIN)
     }
-    if (entity_id := call.data.get(ATTR_ENTITY_ID)) is not None:
+    if entity_id is not None:
         registry_entry = er.async_get(hass).async_get(entity_id)
         if (
             registry_entry is None
