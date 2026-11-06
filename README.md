@@ -107,6 +107,29 @@ Errors are raised as validation errors with a translation key
 message; a dashboard card that wants the user's language should translate the
 key (`component.smartservice_alarm.exceptions.<key>.message`).
 
+### PIN check for a dashboard view (websocket)
+
+A dashboard card can protect a view (for example *Security*) with the alarm
+PIN through the websocket command `smartservice_alarm/check_pin`:
+
+```js
+await hass.callWS({ type: "smartservice_alarm/check_pin", pin: "2580" });
+```
+
+| Answer | Meaning |
+|---|---|
+| `{"wynik": "poprawny", "user_id": "…", "osoba": "Piotr"}` | the PIN of this user |
+| `{"wynik": "niepoprawny", "pozostalo": 3}` | wrong PIN; tries left before the lockout |
+| `{"wynik": "zablokowany", "do": "ISO"}` | the account or the whole panel is locked until then |
+
+`entity_id` is optional, as with the actions (errors `unknown_alarm`,
+`choose_alarm`). Any signed-in user can call it. Wrong PINs count together
+with arming and disarming: the same lockouts, in both directions. It changes
+nothing else (no state, no attribute) and never answers with the PIN. It is a
+websocket command and not an action on purpose: the data of an action call
+goes into a `call_service` event and so into the recorder's database (see the
+note below), a websocket command's data does not.
+
 ## Logbook and events
 
 Every action fires `smartservice_alarm_event` with `akcja` (`uzbrojenie`,
@@ -114,7 +137,9 @@ Every action fires `smartservice_alarm_event` with `akcja` (`uzbrojenie`,
 `pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` - a listed sensor open at
 the end of the exit delay, `ustawienia` - the options changed,
 `czujka_pominieta` - a sensor bypassed after 3 alarms, `powrot_po_przerwie` -
-Home Assistant started again while the panel guarded), the mode, the
+Home Assistant started again while the panel guarded,
+`wejscie_bezpieczenstwo` / `wejscie_bezpieczenstwo_nieudane` - the PIN check
+of a dashboard view, right / wrong), the mode, the
 PIN owner and the calling account (ids and names), the sensor name, attempt
 counters and the lockout end.
 The logbook shows it as text, for example *Disarmed: Piotr (from account:
@@ -145,6 +170,12 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
 - Diagnostics redact salts and hashes; `status`, attributes, events and logs
   never contain a PIN, a hash or a salt.
 - The *default code* of the alarm entity settings is ignored on purpose.
+- The PIN check for a dashboard view (`smartservice_alarm/check_pin`) is a
+  websocket command, so its PIN is never in a `call_service` event or the
+  recorder's database. Only Home Assistant's own debug log of the websocket
+  API (`homeassistant.components.websocket_api`, off by default) writes every
+  received message - this PIN too, as it does with access tokens; keep it off
+  in normal use.
 
 **Note about the recorder.** Home Assistant fires a `call_service` event for
 every action call, with the call data — that includes the `code` of

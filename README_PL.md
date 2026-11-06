@@ -113,6 +113,29 @@ Home Assistant wpisuje do treści błędu tekst angielski; karta, która ma
 pokazać komunikat po polsku, tłumaczy klucz
 (`component.smartservice_alarm.exceptions.<klucz>.message`).
 
+### Sprawdzenie PIN-u dla widoku w panelu (websocket)
+
+Karta w panelu może chronić widok (np. „Bezpieczeństwo”) PIN-em alarmu przez
+polecenie websocket `smartservice_alarm/check_pin`:
+
+```js
+await hass.callWS({ type: "smartservice_alarm/check_pin", pin: "2580" });
+```
+
+| Odpowiedź | Znaczenie |
+|---|---|
+| `{"wynik": "poprawny", "user_id": "…", "osoba": "Piotr"}` | PIN tego użytkownika |
+| `{"wynik": "niepoprawny", "pozostalo": 3}` | błędny PIN; ile prób zostało do blokady |
+| `{"wynik": "zablokowany", "do": "ISO"}` | konto albo cała centrala zablokowane do tej chwili |
+
+`entity_id` jest opcjonalne, jak w usługach (błędy `unknown_alarm`,
+`choose_alarm`). Może je wywołać każdy zalogowany użytkownik. Błędne PIN-y
+liczą się razem z uzbrajaniem i rozbrajaniem: te same blokady, w obie strony.
+Niczego więcej nie zmienia (ani stanu, ani atrybutów) i nigdy nie odpowiada
+PIN-em. To celowo polecenie websocket, a nie usługa: dane wywołania usługi
+trafiają do zdarzenia `call_service`, a więc do bazy recordera (patrz uwaga
+niżej), dane polecenia websocket — nie.
+
 ## Dziennik i zdarzenia
 
 Każda czynność wysyła zdarzenie `smartservice_alarm_event` z polem `akcja`
@@ -120,7 +143,9 @@ Każda czynność wysyła zdarzenie `smartservice_alarm_event` z polem `akcja`
 `wyzwolenie`, `pin_ustawiony`, `pin_usuniety`, `odmowa_uzbrojenia` — otwarty
 czujnik na końcu czasu na wyjście, `ustawienia` — zmiana ustawień centrali,
 `czujka_pominieta` — czujka pominięta po 3 alarmach, `powrot_po_przerwie` —
-Home Assistant wrócił po przerwie, gdy centrala pilnowała),
+Home Assistant wrócił po przerwie, gdy centrala pilnowała,
+`wejscie_bezpieczenstwo` / `wejscie_bezpieczenstwo_nieudane` — sprawdzenie
+PIN-u widoku w panelu, poprawne / błędne),
 trybem, właścicielem PIN-u i kontem wywołującym (id i imiona), nazwą czujnika,
 licznikiem prób i końcem blokady. Dziennik pokazuje je jako tekst, np. „Rozbrojenie: Jan (z konta:
 Tablet salon)”, „Błędny PIN z konta Jan (3/5)”, „Blokada konta Jan
@@ -152,6 +177,12 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
 - Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi nigdy
   nie zawierają PIN-u, skrótu ani soli.
 - „Kod domyślny” z ustawień encji alarmu jest celowo pomijany.
+- Sprawdzenie PIN-u dla widoku w panelu (`smartservice_alarm/check_pin`) to
+  polecenie websocket, więc jego PIN nigdy nie trafia do zdarzenia
+  `call_service` ani do bazy recordera. Tylko własny log debugowania API
+  websocket w Home Assistant (`homeassistant.components.websocket_api`,
+  domyślnie wyłączony) zapisuje każdą odebraną wiadomość — także ten PIN, tak
+  jak tokeny dostępu; na co dzień zostaw go wyłączony.
 
 **Uwaga o rejestratorze (recorder).** Home Assistant przy każdym wywołaniu
 usługi wysyła zdarzenie `call_service` z danymi wywołania — także z `code`

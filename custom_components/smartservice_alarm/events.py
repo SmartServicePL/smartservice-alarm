@@ -12,6 +12,8 @@ from .const import (
     ACTION_ARM_REFUSED,
     ACTION_BACK,
     ACTION_DISARM,
+    ACTION_ENTRY,
+    ACTION_ENTRY_FAILED,
     ACTION_LOCKOUT,
     ACTION_OPTIONS,
     ACTION_PIN_CLEARED,
@@ -173,6 +175,16 @@ def describe(data: dict[str, Any], language: str | None) -> str:
         if polish:
             return f"Czujka pominięta do rozbrojenia: {sensor} ({count} alarmy z rzędu)"
         return f"Sensor bypassed until disarming: {sensor} ({count} alarms in a row)"
+    if action == ACTION_ENTRY:
+        person = owner or "?"
+        if polish:
+            return f"{person}: wejście do Bezpieczeństwa"
+        return f"{person}: entered Security"
+    if action == ACTION_ENTRY_FAILED:
+        # Never a person: a wrong PIN tells nothing about whose it was meant to be.
+        if polish:
+            return "Nieudana próba wejścia do Bezpieczeństwa"
+        return "Failed attempt to enter Security"
     if action == ACTION_BACK:
         minutes = data.get("przerwa_min")
         if polish:

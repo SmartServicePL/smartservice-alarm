@@ -77,6 +77,15 @@ ACTION_SENSOR_BYPASSED: Final = "czujka_pominieta"
 # Z21: Home Assistant started again while the panel guarded - how long it was
 # down (minutes, when known) and the state after the countdowns caught up.
 ACTION_BACK: Final = "powrot_po_przerwie"
+# 1.3.0: the PIN checked when entering the panel's "Security" view
+# (websocket command, never a service - see WS_CHECK_PIN).
+ACTION_ENTRY: Final = "wejscie_bezpieczenstwo"
+ACTION_ENTRY_FAILED: Final = "wejscie_bezpieczenstwo_nieudane"
+
+# Websocket command, not a service: Home Assistant puts the data of every
+# service call into a call_service event, and the recorder writes it to its
+# database - a PIN must never get there.
+WS_CHECK_PIN: Final = "smartservice_alarm/check_pin"
 
 # Z25: at most this many triggers of one sensor in one arming.
 MAX_TRIGGERS_PER_SENSOR: Final = 3
