@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
@@ -32,7 +33,9 @@ from .const import (
     ACTION_ENTRY_FAILED,
     ACTION_LOCKOUT,
     ACTION_WRONG_CODE,
+    CONF_KIND,
     DOMAIN,
+    KIND_PINS,
     STORAGE_VERSION,
 )
 
@@ -81,6 +84,12 @@ def alarm_error(key: str, **placeholders: str) -> ServiceValidationError:
         translation_key=key,
         translation_placeholders=placeholders or None,
     )
+
+
+def pins_only(data: Any) -> bool:
+    """An entry (its data) that keeps only PINs, without an alarm panel."""
+    # entry.data is a read-only mapping, not a dict.
+    return isinstance(data, Mapping) and data.get(CONF_KIND) == KIND_PINS
 
 
 def bucket_for(user_id: str | None) -> str:
@@ -233,8 +242,11 @@ class EntryCheck:
     owner_name: str | None = None
     remaining: int | None = None
     locked_until: datetime | None = None
+    no_pins: bool = False
 
     def as_response(self) -> dict[str, Any]:
+        if self.no_pins:
+            return {"wynik": "brak_pinow"}
         if self.locked_until is not None:
             return {"wynik": "zablokowany", "do": self.locked_until.isoformat()}
         if self.owner_id is not None:
@@ -266,6 +278,8 @@ class PinManager:
         )
         self._data: dict[str, Any] = {KEY_PINS: {}, KEY_LOCKOUTS: {}, KEY_STATE: {}}
         self._lock = asyncio.Lock()
+        # Platforms set up for this entry (none when it keeps only PINs).
+        self.platforms: list[str] = []
 
     @property
     def pins(self) -> dict[str, dict[str, Any]]:
@@ -414,6 +428,11 @@ class PinManager:
         for the card, not an error.
         """
         async with self._lock:
+            if not self.pins:
+                # Nobody has a PIN yet: nothing to guess, so no try is counted
+                # and nothing is locked - the card asks to set the PINs (and
+                # does not open the view: "always a PIN").
+                return EntryCheck(no_pins=True)
             if (until := await self._async_lock_end(bucket)) is not None:
                 # Locked: the PIN is not even hashed.
                 return EntryCheck(locked_until=until)

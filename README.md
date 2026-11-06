@@ -25,6 +25,14 @@ and writes every action to the logbook — never the PIN itself.
 Manual installation: copy `custom_components/smartservice_alarm` into the
 `custom_components` folder of your configuration and restart.
 
+**PINs only.** Choose the kind *PINs only (no alarm panel)* when the home has
+no alarm of this integration but a dashboard view (for example cameras) should
+still ask for a personal PIN: the entry keeps the users' PINs and lockouts and
+answers `smartservice_alarm/check_pin`, and there is nothing to arm. It is the
+only place for the PINs: no second entry can be added next to it (and none next
+to an alarm panel, which keeps the PINs itself). To get the alarm panel later,
+open the entry's options and turn it on - the PINs stay.
+
 ## Panel
 
 | | |
@@ -121,6 +129,7 @@ await hass.callWS({ type: "smartservice_alarm/check_pin", pin: "2580" });
 | `{"wynik": "poprawny", "user_id": "…", "osoba": "Piotr"}` | the PIN of this user |
 | `{"wynik": "niepoprawny", "pozostalo": 3}` | wrong PIN; tries left before the lockout |
 | `{"wynik": "zablokowany", "do": "ISO"}` | the account or the whole panel is locked until then |
+| `{"wynik": "brak_pinow"}` | nobody has a PIN yet; no try is counted (set the PINs first) |
 
 `entity_id` is optional, as with the actions (errors `unknown_alarm`,
 `choose_alarm`). Any signed-in user can call it. Wrong PINs count together
@@ -177,15 +186,39 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   received message - this PIN too, as it does with access tokens; keep it off
   in normal use.
 
+### Arming, disarming and PINs without the recorder (websocket)
+
+Everything that carries a PIN also has a websocket command. A dashboard card
+or an add-on should use these instead of the actions:
+
+| Command | Fields | The same as |
+|---|---|---|
+| `smartservice_alarm/arm` | `tryb` (`away`, `home`, `night`), `code` | `alarm_control_panel.alarm_arm_*` |
+| `smartservice_alarm/disarm` | `code` | `alarm_control_panel.alarm_disarm` |
+| `smartservice_alarm/set_pin` | `user_id`, `pin`, `current_pin` (optional) | `smartservice_alarm.set_pin` |
+| `smartservice_alarm/clear_pin` | `user_id` | `smartservice_alarm.clear_pin` |
+
+Each takes an optional `entity_id`. The answer is `{"wynik": "ok"}`
+(`clear_pin` adds `"usuniety": true/false`) or the action's own error: the
+websocket error's `code` and `translation_key` are the translation key (for
+example `wrong_pin`, `locked_out` with `godzina`, `sensors_open` with
+`czujniki`, `code_arm_required` from `alarm_control_panel`), a missing control
+permission for the panel is `unauthorized`. The commands call the same panel
+methods as the actions with the signed-in user's context, so the rules,
+counters, lockouts, events and logbook are the same. A field that is not text
+(or a number) is never refused by the schema (Home Assistant would log it); it
+is just no PIN.
+
 **Note about the recorder.** Home Assistant fires a `call_service` event for
 every action call, with the call data — that includes the `code` of
 `alarm_control_panel.*` and the `pin` of `set_pin`. The recorder stores these
 events in its database by default (this applies to every alarm panel with a
 code). PINs then stay in the database until the recorder purges old events
 (`purge_keep_days`, 10 days by default); only somebody with access to the
-Home Assistant files or database can read them. To keep PINs out of the
-database, exclude the event type in your configuration (it only removes the
-"triggered by action …" note from manual actions in the logbook):
+Home Assistant files or database can read them. The websocket commands above
+keep PINs out of the database; to keep the actions' PINs out too, exclude the
+event type in your configuration (it only removes the "triggered by action …"
+note from manual actions in the logbook):
 
 ```yaml
 recorder:

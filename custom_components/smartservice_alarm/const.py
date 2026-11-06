@@ -20,6 +20,13 @@ CONF_CODE_ARM_REQUIRED: Final = "code_arm_required"
 CONF_SENSORS: Final = "sensors"
 
 DEFAULT_NAME: Final = "Alarm"
+# 1.4.0: an entry can keep only the users'
+# PINs, without an alarm panel - for the PIN of a dashboard view in a home
+# without this alarm. Stored in the entry's data; a missing key is a panel.
+CONF_KIND: Final = "rodzaj"
+KIND_PANEL: Final = "centrala"
+KIND_PINS: Final = "piny"
+CONF_PANEL_ON: Final = "centrala"
 DEFAULT_OPTIONS: Final = {
     CONF_ARM_AWAY: True,
     CONF_ARM_HOME: True,
@@ -86,6 +93,11 @@ ACTION_ENTRY_FAILED: Final = "wejscie_bezpieczenstwo_nieudane"
 # service call into a call_service event, and the recorder writes it to its
 # database - a PIN must never get there.
 WS_CHECK_PIN: Final = "smartservice_alarm/check_pin"
+# 1.4.0: every PIN goes this way (the actions stay for automations).
+WS_ARM: Final = "smartservice_alarm/arm"
+WS_DISARM: Final = "smartservice_alarm/disarm"
+WS_SET_PIN: Final = "smartservice_alarm/set_pin"
+WS_CLEAR_PIN: Final = "smartservice_alarm/clear_pin"
 
 # Z25: at most this many triggers of one sensor in one arming.
 MAX_TRIGGERS_PER_SENSOR: Final = 3

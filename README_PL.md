@@ -25,6 +25,14 @@ błędnych PIN-ach i zapisuje każdą czynność w dzienniku — nigdy sam PIN.
 Instalacja ręczna: skopiuj `custom_components/smartservice_alarm` do folderu
 `custom_components` konfiguracji i uruchom ponownie.
 
+**Same PIN-y.** Wybierz rodzaj *Same PIN-y (bez centrali)*, gdy w domu nie ma
+alarmu tej integracji, a widok w panelu (np. kamery) ma i tak pytać o osobny
+PIN: wpis przechowuje PIN-y i blokady użytkowników i odpowiada na
+`smartservice_alarm/check_pin`, a uzbrajać nie ma czego. To jedyne miejsce na
+PIN-y: obok niego nie da się dodać drugiego wpisu (ani takiego wpisu obok
+centrali, która sama przechowuje PIN-y). Żeby później mieć centralę, otwórz
+opcje wpisu i ją włącz — PIN-y zostaną.
+
 ## Centrala
 
 | | |
@@ -127,6 +135,7 @@ await hass.callWS({ type: "smartservice_alarm/check_pin", pin: "2580" });
 | `{"wynik": "poprawny", "user_id": "…", "osoba": "Piotr"}` | PIN tego użytkownika |
 | `{"wynik": "niepoprawny", "pozostalo": 3}` | błędny PIN; ile prób zostało do blokady |
 | `{"wynik": "zablokowany", "do": "ISO"}` | konto albo cała centrala zablokowane do tej chwili |
+| `{"wynik": "brak_pinow"}` | nikt nie ma jeszcze PIN-u; próba się nie liczy (najpierw ustaw PIN-y) |
 
 `entity_id` jest opcjonalne, jak w usługach (błędy `unknown_alarm`,
 `choose_alarm`). Może je wywołać każdy zalogowany użytkownik. Błędne PIN-y
@@ -184,13 +193,37 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   domyślnie wyłączony) zapisuje każdą odebraną wiadomość — także ten PIN, tak
   jak tokeny dostępu; na co dzień zostaw go wyłączony.
 
+### Uzbrajanie, rozbrajanie i PIN-y bez rejestratora (websocket)
+
+Wszystko, co niesie PIN, ma też polecenie websocket. Karta w panelu albo
+dodatek powinny używać ich zamiast usług:
+
+| Polecenie | Pola | To samo co |
+|---|---|---|
+| `smartservice_alarm/arm` | `tryb` (`away`, `home`, `night`), `code` | `alarm_control_panel.alarm_arm_*` |
+| `smartservice_alarm/disarm` | `code` | `alarm_control_panel.alarm_disarm` |
+| `smartservice_alarm/set_pin` | `user_id`, `pin`, `current_pin` (opcjonalnie) | `smartservice_alarm.set_pin` |
+| `smartservice_alarm/clear_pin` | `user_id` | `smartservice_alarm.clear_pin` |
+
+Każde przyjmuje opcjonalne `entity_id`. Odpowiedź to `{"wynik": "ok"}`
+(`clear_pin` dodaje `"usuniety": true/false`) albo ten sam błąd co w usłudze:
+`code` i `translation_key` błędu websocket to klucz tłumaczenia (np.
+`wrong_pin`, `locked_out` z `godzina`, `sensors_open` z `czujniki`,
+`code_arm_required` z `alarm_control_panel`), a brak uprawnienia do sterowania
+centralą to `unauthorized`. Polecenia wywołują te same metody centrali co
+usługi, z kontekstem zalogowanego użytkownika, więc reguły, liczniki, blokady,
+zdarzenia i dziennik są te same. Pole, które nie jest tekstem (ani liczbą),
+nie jest odrzucane przez schemat (Home Assistant zapisałby je w logu); jest po
+prostu brakiem PIN-u.
+
 **Uwaga o rejestratorze (recorder).** Home Assistant przy każdym wywołaniu
 usługi wysyła zdarzenie `call_service` z danymi wywołania — także z `code`
 usług `alarm_control_panel.*` i `pin` usługi `set_pin`. Rejestrator domyślnie
 zapisuje te zdarzenia w bazie (dotyczy to każdej centrali z kodem). PIN-y leżą
 wtedy w bazie do czasu usunięcia starych zdarzeń (`purge_keep_days`, domyślnie
 10 dni); odczyta je tylko ktoś z dostępem do plików albo bazy Home Assistant.
-Żeby PIN-y nie trafiały do bazy, wyklucz ten typ zdarzeń w konfiguracji (w
+Polecenia websocket opisane wyżej nie zostawiają PIN-ów w bazie; żeby nie
+zostawiały ich też usługi, wyklucz ten typ zdarzeń w konfiguracji (w
 dzienniku znika wtedy tylko dopisek „wywołane akcją …” przy ręcznych akcjach):
 
 ```yaml

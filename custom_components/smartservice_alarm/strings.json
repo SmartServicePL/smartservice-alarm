@@ -4,17 +4,23 @@
     "step": {
       "user": {
         "title": "Smart Service Alarm",
-        "description": "Creates an alarm panel with a personal PIN for every user. Modes, delays and sensors checked when arming are set later in the options.",
+        "description": "Creates an alarm panel with a personal PIN for every user - or only the personal PINs, without an alarm panel (for example to protect a dashboard view in a home without this alarm). Modes, delays and sensors checked when arming are set later in the options.",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "rodzaj": "Kind"
         },
         "data_description": {
-          "name": "Name of the alarm panel, for example Home."
+          "name": "Name of the alarm panel, for example Home.",
+          "rodzaj": "An alarm panel with PINs, or only the PINs (no alarm panel; it can be turned on later in the options, the PINs stay)."
         }
       }
     },
     "error": {
       "empty_name": "Enter a name."
+    },
+    "abort": {
+      "pins_only_exists": "Smart Service Alarm already keeps the PINs without an alarm panel. To add the alarm panel, turn it on in that entry's options - the PINs stay.",
+      "panel_keeps_pins": "A Smart Service Alarm panel is already configured and keeps the PINs."
     }
   },
   "options": {
@@ -38,11 +44,26 @@
           "code_arm_required": "When off, arming without a PIN is allowed (for example by an automation). A PIN that is given must always be correct.",
           "sensors": "Arming is refused while any of these sensors is open or has no reading."
         }
+      },
+      "piny": {
+        "title": "PINs only",
+        "description": "This entry keeps only the users' PINs, without an alarm panel. Turn on the alarm panel to arm and disarm with these PINs; the PINs stay.",
+        "data": {
+          "centrala": "Turn on the alarm panel"
+        }
       }
     },
     "error": {
       "no_mode": "Enable at least one mode.",
       "not_disarmed": "Change the settings after disarming the alarm."
+    }
+  },
+  "selector": {
+    "rodzaj": {
+      "options": {
+        "centrala": "Alarm panel with PINs",
+        "piny": "PINs only (no alarm panel)"
+      }
     }
   },
   "exceptions": {

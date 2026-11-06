@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.0
+
+- Websocket commands for everything that carries a PIN:
+  `smartservice_alarm/arm` (`tryb`: `away` / `home` / `night`, `code`),
+  `smartservice_alarm/disarm` (`code`), `smartservice_alarm/set_pin`
+  (`user_id`, `pin`, `current_pin`) and `smartservice_alarm/clear_pin`
+  (`user_id`), each with an optional `entity_id`. They answer
+  `{"wynik": "ok"}` (`clear_pin` also `usuniety`) or the same error as the
+  action, with its translation key and placeholders. The same entity methods,
+  permissions, counters and lockouts as the actions; the PIN never goes into a
+  `call_service` event or the recorder's database. The actions stay for
+  automations.
+- A new kind of entry, **PINs only** (`rodzaj: piny`): the users' PINs,
+  lockouts and the PIN check for a dashboard view, without an alarm panel -
+  for a home without this alarm. Only one place for the PINs: no second entry
+  next to it, and no PINs-only entry next to a panel. Its options turn the
+  alarm panel on later; the PINs stay.
+- `check_pin` answers `{"wynik": "brak_pinow"}` while nobody has a PIN yet:
+  no try is counted and nothing is locked (there is nothing to guess).
+
 ## 1.3.0
 
 - New websocket command `smartservice_alarm/check_pin` (`pin`, optional
