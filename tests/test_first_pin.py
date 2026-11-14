@@ -36,9 +36,7 @@ async def _client(hass: HomeAssistant, hass_ws_client, user: MockUser):
 
 
 async def _ws_set_pin(client, user: MockUser, pin: str, **extra: Any) -> dict[str, Any]:
-    await client.send_json_auto_id(
-        {"type": WS_SET_PIN, "user_id": user.id, "pin": pin, **extra}
-    )
+    await client.send_json_auto_id({"type": WS_SET_PIN, "user_id": user.id, "pin": pin, **extra})
     return await client.receive_json()
 
 
