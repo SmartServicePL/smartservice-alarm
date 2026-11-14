@@ -120,7 +120,7 @@ async def _set_own(
     try:
         await set_pin(hass, user, user, pin, extra.get("current_pin"))
     except ServiceValidationError as err:
-        return err.value.translation_key
+        return str(err.translation_key)
     return "ok"
 
 
