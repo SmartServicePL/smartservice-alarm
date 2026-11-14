@@ -182,10 +182,9 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   przetrwają restart.
 - **Bez wyroczni PIN-ów.** U zwykłego użytkownika `set_pin` z cudzym PIN-em
   i błędny `current_pin` liczą się jako nieudane próby.
-- **Pierwszy PIN ustawia administrator.** Każdy PIN rozbraja centralę, więc
-  konto nie może nadać go samo sobie (konto dziecka, telewizora ani konto
-  tylko do odczytu): zwykły użytkownik bez PIN-u dostaje odmowę `set_pin`
-  (`first_pin_by_admin`).
+- **Pierwszy PIN ustawia administrator.** Zwykły użytkownik zmienia tylko swój
+  istniejący PIN; bez PIN-u dostaje odmowę `set_pin` (`first_pin_by_admin`,
+  bez liczenia jako nieudana próba).
 - PIN-y i blokady usuniętych użytkowników są usuwane.
 - Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi nigdy
   nie zawierają PIN-u, skrótu ani soli.

@@ -489,10 +489,9 @@ class PinManager:
         to find out other people's PINs. An administrator's collision is
         refused but not counted.
 
-        1.4.1: a normal user only changes his own existing PIN. The first PIN
-        comes from an administrator: every PIN disarms the panel, so an
-        account must not give itself one (a child's, a TV's, a read-only
-        account). The refusal is not a failed attempt - nothing is guessed.
+        1.4.1: a normal user only changes his own existing PIN; the first PIN
+        comes from an administrator. The refusal is not a failed attempt -
+        nothing is guessed.
         """
         async with self._lock:
             if not admin and target_id not in self.pins:

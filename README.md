@@ -175,10 +175,9 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   survive a restart.
 - **No PIN oracle.** For a normal user, a `set_pin` that collides with somebody
   else's PIN and a wrong `current_pin` both count as failed attempts.
-- **The first PIN comes from an administrator.** Every PIN disarms the panel,
-  so an account cannot give itself one (a child's, a TV's or a read-only
-  account): without a PIN, a normal user's `set_pin` is refused
-  (`first_pin_by_admin`).
+- **The first PIN comes from an administrator.** A normal user only changes
+  his own existing PIN; without a PIN his `set_pin` is refused
+  (`first_pin_by_admin`, not counted as a failed attempt).
 - PINs and lockouts of deleted users are removed.
 - Diagnostics redact salts and hashes; `status`, attributes, events and logs
   never contain a PIN, a hash or a salt.

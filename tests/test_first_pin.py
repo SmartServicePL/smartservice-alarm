@@ -1,8 +1,7 @@
 """1.4.1: the first PIN comes from an administrator.
 
-Every PIN disarms the panel. Before 1.4.1 an account without a PIN (a
-child's, a TV's, a read-only one) could give itself one with set_pin and
-then disarm with it on any keypad in the home.
+A normal or read-only account only changes its own existing PIN, by the
+action and by the websocket command alike.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from homeassistant.auth.const import GROUP_ID_READ_ONLY
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
-from custom_components.smartservice_alarm.const import EVENT_ALARM, WS_SET_PIN
+from custom_components.smartservice_alarm.const import EVENT_ALARM, WS_CHECK_PIN, WS_SET_PIN
 from custom_components.smartservice_alarm.pins import record_matches
 
 from .conftest import ENTITY, alarm, give_pins, manager_of, set_pin
@@ -76,7 +75,7 @@ async def test_no_first_pin_by_websocket(hass, users, loaded, hass_ws_client, ki
 
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_a_self_made_pin_does_not_disarm(hass, users, loaded, hass_ws_client) -> None:
-    """The attack: the TV gives itself a PIN, the keypad tablet uses it."""
+    """A PIN refused to one account does not disarm from another one."""
     pins = await give_pins(hass, users)
     await alarm(hass, "alarm_arm_away", users.piotr, pins["piotr"])
     tv = await _read_only(hass)
@@ -103,6 +102,78 @@ async def test_the_owner_still_changes_his_pin(hass, users, loaded, hass_ws_clie
     manager = manager_of(loaded)
     assert record_matches(manager.pins[tv.id], OWN)
     assert record_matches(manager.pins[users.piotr.id], "3579")
+
+
+async def _account(hass: HomeAssistant, users, kind: str) -> MockUser:
+    if kind == "administrator":
+        return users.admin
+    return await _caller(hass, users, kind)
+
+
+async def _set_own(
+    hass: HomeAssistant, hass_ws_client, user: MockUser, way: str, pin: str, **extra: Any
+) -> str:
+    """set_pin of the caller's own PIN by the action or the websocket: "ok" or the key."""
+    if way == "websocket":
+        answer = await _ws_set_pin(await _client(hass, hass_ws_client, user), user, pin, **extra)
+        return "ok" if answer["success"] else answer["error"]["translation_key"]
+    try:
+        await set_pin(hass, user, user, pin, extra.get("current_pin"))
+    except ServiceValidationError as err:
+        return err.value.translation_key
+    return "ok"
+
+
+@pytest.mark.parametrize("way", ["usluga", "websocket"])
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("administrator", "ok"),
+        ("zwykle", "first_pin_by_admin"),
+        ("tylko_odczyt", "first_pin_by_admin"),
+    ],
+)
+async def test_first_own_pin_every_account_both_ways(
+    hass, users, loaded, hass_ws_client, way, kind, expected
+) -> None:
+    user = await _account(hass, users, kind)
+    assert await _set_own(hass, hass_ws_client, user, way, OWN) == expected
+    assert manager_of(loaded).has_pin(user.id) is (expected == "ok")
+    assert manager_of(loaded).lockouts == {}
+
+
+@pytest.mark.parametrize("way", ["usluga", "websocket"])
+@pytest.mark.parametrize("kind", ["zwykle", "tylko_odczyt"])
+async def test_wrong_current_pin_counts_and_locks(
+    hass, users, loaded, hass_ws_client, way, kind
+) -> None:
+    """A wrong current PIN counts like a wrong PIN at check_pin: 5 in a row lock."""
+    user = await _account(hass, users, kind)
+    await set_pin(hass, users.admin, user, "1357")
+    for attempt in range(1, 5):
+        answer = await _set_own(hass, hass_ws_client, user, way, OWN, current_pin="9753")
+        assert answer == "wrong_current_pin"
+        assert manager_of(loaded).lockouts[user.id]["nieudane"] == attempt
+    assert (
+        await _set_own(hass, hass_ws_client, user, way, OWN, current_pin="9753")
+    ) == "locked_out"
+    # Locked: also the right current PIN and the entry check wait.
+    assert (
+        await _set_own(hass, hass_ws_client, user, way, OWN, current_pin="1357")
+    ) == "locked_out"
+    client = await _client(hass, hass_ws_client, user)
+    await client.send_json_auto_id({"type": WS_CHECK_PIN, "pin": "1357"})
+    assert (await client.receive_json())["result"]["wynik"] == "zablokowany"
+    assert record_matches(manager_of(loaded).pins[user.id], "1357")
+
+
+@pytest.mark.parametrize("way", ["usluga", "websocket"])
+async def test_admin_changes_his_pin_without_the_current_one(
+    hass, users, loaded, hass_ws_client, way
+) -> None:
+    await set_pin(hass, users.admin, users.admin, "1357")
+    assert await _set_own(hass, hass_ws_client, users.admin, way, OWN) == "ok"
+    assert record_matches(manager_of(loaded).pins[users.admin.id], OWN)
 
 
 async def test_admin_still_sets_any_first_pin(hass, users, loaded) -> None:
