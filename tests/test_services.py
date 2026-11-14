@@ -180,6 +180,13 @@ async def test_no_pin_in_logs(hass, users, loaded, caplog) -> None:
     await set_pin(hass, users.piotr, users.piotr, "3579", current_pin=pins["piotr"])
     await alarm(hass, "alarm_disarm", users.piotr, "3579")
     # Szukamy PIN-u jako osobnej liczby: cztery cyfry mogą trafić się
-    # przypadkiem w znaczniku czasu albo identyfikatorze.
+    # przypadkiem w znaczniku czasu albo identyfikatorze. Pomijamy zapis
+    # magazynu pomocnika testów: wypisuje losowe sole i skróty (base64), w
+    # których cztery cyfry trafiają się przypadkiem.
+    text = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if not record.name.startswith("pytest_homeassistant_custom_component")
+    )
     for pin in (*pins.values(), WRONG, "3579"):
-        assert not re.search(rf"(?<!\d){pin}(?!\d)", caplog.text)
+        assert not re.search(rf"(?<!\d){pin}(?!\d)", text)
