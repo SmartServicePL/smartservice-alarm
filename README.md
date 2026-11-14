@@ -178,6 +178,14 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
 - **The first PIN comes from an administrator.** A normal user only changes
   his own existing PIN; without a PIN his `set_pin` is refused
   (`first_pin_by_admin`, not counted as a failed attempt).
+- **Duress PIN.** A household member can have a second PIN (`rodzaj`:
+  `przymus` in `set_pin` / `clear_pin`, only for somebody with a PIN). It
+  works exactly like his PIN - the same state, logbook entry and answer - and
+  also fires `smartservice_alarm_napad` (`entity_id`, `wlasciciel_id`,
+  `czas`), an event the logbook does not show, for a silent alarm by an
+  automation. Every check hashes the PINs of both kinds, so the time does not
+  tell which kind matched. Setting or removing a duress PIN leaves no logbook
+  entry.
 - PINs and lockouts of deleted users are removed.
 - Diagnostics redact salts and hashes; `status`, attributes, events and logs
   never contain a PIN, a hash or a salt.

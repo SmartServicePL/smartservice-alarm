@@ -10,7 +10,7 @@ from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from . import events
-from .const import ACTION_PIN_CLEARED, ACTION_PIN_SET, DOMAIN
+from .const import ACTION_PIN_CLEARED, ACTION_PIN_SET, DOMAIN, PIN_KIND_DURESS, PIN_KIND_NORMAL
 from .pins import PinManager, alarm_error
 
 type AlarmConfigEntry = ConfigEntry[PinManager]
@@ -66,9 +66,14 @@ async def async_set_pin_for(
     pin: str,
     current_pin: str | None,
     context: Context | None,
+    kind: str = PIN_KIND_NORMAL,
 ) -> None:
     """Set a PIN: an administrator for anyone; a user only changes his own
-    existing PIN (the first one comes from an administrator, see pins.py)."""
+    existing PIN (the first one comes from an administrator, see pins.py).
+
+    1.5.0: a duress PIN (``kind`` "przymus") leaves no logbook entry - the
+    logbook is open to every account, and the entry would tell that one
+    exists."""
     if not caller.is_admin and target_id != caller.id:
         raise alarm_error("own_pin_only")
     await async_target_user(hass, target_id)
@@ -79,7 +84,10 @@ async def async_set_pin_for(
         bucket=caller.id,
         current_pin=current_pin,
         context=context,
+        kind=kind,
     )
+    if kind == PIN_KIND_DURESS:
+        return
     await events.async_fire(
         hass,
         entity_id_of(hass, entry),
@@ -96,10 +104,14 @@ async def async_clear_pin_for(
     caller: User,
     target_id: str,
     context: Context | None,
+    kind: str = PIN_KIND_NORMAL,
 ) -> bool:
-    """Remove a PIN (the caller is an administrator); True when there was one."""
-    if not await entry.runtime_data.async_clear_pin(target_id):
+    """Remove a PIN (the caller is an administrator); True when there was one.
+    A duress PIN goes without a logbook entry (see async_set_pin_for)."""
+    if not await entry.runtime_data.async_clear_pin(target_id, kind):
         return False
+    if kind == PIN_KIND_DURESS:
+        return True
     await events.async_fire(
         hass,
         entity_id_of(hass, entry),

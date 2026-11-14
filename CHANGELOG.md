@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.5.0
+
+- PIN pod przymusem: domownik może mieć drugi PIN (`set_pin` z polem
+  `rodzaj`: `przymus`). Rozbraja, uzbraja i sprawdza wejście dokładnie jak
+  jego PIN - ten sam stan, ten sam wpis w dzienniku, ta sama odpowiedź - a
+  integracja wysyła dodatkowo zdarzenie `smartservice_alarm_napad`
+  (`entity_id`, `wlasciciel_id`, `czas`; nigdy PIN), którego dziennik nie
+  pokazuje. Ustawia go administrator; domownik zmienia tylko swój istniejący,
+  podając swój PIN. Wszystkie PIN-y obu rodzajów są różne. `clear_pin` z
+  `rodzaj`: `przymus` usuwa tylko ten PIN; usunięcie PIN-u usuwa też PIN pod
+  przymusem. `status` pokazuje `pin_przymus`.
+- Duress PIN: a household member can have a second PIN (`set_pin` with
+  `rodzaj`: `przymus`). It disarms, arms and checks the entry exactly like
+  his PIN - the same state, the same logbook entry, the same answer - and the
+  integration also fires the event `smartservice_alarm_napad` (`entity_id`,
+  `wlasciciel_id`, `czas`; never a PIN), which the logbook does not show. An
+  administrator sets it; a user only changes his own existing one, with his
+  PIN. Every PIN of both kinds is different. `clear_pin` with `rodzaj`:
+  `przymus` removes only that PIN; removing a PIN removes the duress PIN too.
+  `status` shows `pin_przymus`.
+
 ## 1.4.1
 
 - Poprawka uprawnień przy ustawianiu PIN-u: pierwszy PIN użytkownika ustawia

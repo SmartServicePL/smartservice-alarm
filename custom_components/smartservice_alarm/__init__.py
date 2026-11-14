@@ -40,6 +40,9 @@ from .const import (
     ATTR_SENSOR,
     ATTR_USER_ID,
     DOMAIN,
+    PIN_KIND,
+    PIN_KIND_NORMAL,
+    PIN_KINDS,
     SERVICE_CLEAR_PIN,
     SERVICE_SET_PIN,
     SERVICE_STATUS,
@@ -61,9 +64,14 @@ SET_PIN_SCHEMA = vol.Schema(
         vol.Required(ATTR_USER_ID): cv.string,
         vol.Required(ATTR_PIN): cv.string,
         vol.Optional(ATTR_CURRENT_PIN): cv.string,
+        # 1.5.0: "przymus" - the duress PIN.
+        vol.Optional(PIN_KIND, default=PIN_KIND_NORMAL): vol.In(PIN_KINDS),
     }
 )
 USER_SCHEMA = vol.Schema({**_TARGET, vol.Required(ATTR_USER_ID): cv.string})
+CLEAR_PIN_SCHEMA = USER_SCHEMA.extend(
+    {vol.Optional(PIN_KIND, default=PIN_KIND_NORMAL): vol.In(PIN_KINDS)}
+)
 STATUS_SCHEMA = vol.Schema(_TARGET)
 
 
@@ -134,12 +142,18 @@ def _async_register_services(hass: HomeAssistant) -> None:
             call.data[ATTR_PIN],
             call.data.get(ATTR_CURRENT_PIN),
             call.context,
+            call.data[PIN_KIND],
         )
 
     async def async_clear_pin(call: ServiceCall) -> None:
         caller = await _async_caller(hass, call, admin=True)
         await async_clear_pin_for(
-            hass, _async_entry(hass, call), caller, call.data[ATTR_USER_ID], call.context
+            hass,
+            _async_entry(hass, call),
+            caller,
+            call.data[ATTR_USER_ID],
+            call.context,
+            call.data[PIN_KIND],
         )
 
     async def async_unlock(call: ServiceCall) -> None:
@@ -170,12 +184,16 @@ def _async_register_services(hass: HomeAssistant) -> None:
             until = manager.locked_until(user_id)
             response[user_id] = {
                 "pin": manager.has_pin(user_id),
+                # 1.5.0: only here (the status is for administrators).
+                "pin_przymus": manager.has_duress(user_id),
                 "zablokowany_do": until.isoformat() if until else None,
             }
         return response
 
     hass.services.async_register(DOMAIN, SERVICE_SET_PIN, async_set_pin, SET_PIN_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_CLEAR_PIN, async_clear_pin, USER_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_CLEAR_PIN, async_clear_pin, CLEAR_PIN_SCHEMA
+    )
     hass.services.async_register(DOMAIN, SERVICE_UNLOCK, async_unlock, USER_SCHEMA)
     hass.services.async_register(
         DOMAIN,

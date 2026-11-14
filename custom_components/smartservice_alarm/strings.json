@@ -83,6 +83,8 @@
     "admin_required": { "message": "Only an administrator can do this." },
     "own_pin_only": { "message": "You can only set your own PIN." },
     "first_pin_by_admin": { "message": "Your first PIN is set by an administrator." },
+    "duress_needs_pin": { "message": "A duress PIN can be set only for somebody who has a PIN." },
+    "unknown_pin_kind": { "message": "Unknown kind of PIN." },
     "unknown_user": { "message": "There is no such user." },
     "unknown_alarm": { "message": "This is not a Smart Service Alarm panel." },
     "choose_alarm": { "message": "Several alarm panels are configured — select the alarm panel (entity_id)." }
@@ -95,6 +97,7 @@
         "user_id": { "name": "User ID", "description": "ID of the user who owns the PIN." },
         "pin": { "name": "PIN", "description": "New PIN: 4 to 8 digits, different from the PINs of other users." },
         "current_pin": { "name": "Current PIN", "description": "Required when a user changes his own existing PIN." },
+        "rodzaj": { "name": "Kind", "description": "pin (default) or przymus: the duress PIN, which works like the user's PIN and also sends a silent alarm. Every PIN, of both kinds, is different." },
         "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
       }
     },
@@ -103,6 +106,7 @@
       "description": "Removes the alarm PIN of a user (administrator only).",
       "fields": {
         "user_id": { "name": "User ID", "description": "ID of the user whose PIN is removed." },
+        "rodzaj": { "name": "Kind", "description": "pin (default; the duress PIN goes with it) or przymus (only the duress PIN)." },
         "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
       }
     },

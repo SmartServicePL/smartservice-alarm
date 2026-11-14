@@ -39,6 +39,9 @@ from .const import (
     ATTR_CURRENT_PIN,
     ATTR_PIN,
     ATTR_USER_ID,
+    PIN_KIND,
+    PIN_KIND_NORMAL,
+    PIN_KINDS,
     WS_ARM,
     WS_CHECK_PIN,
     WS_CLEAR_PIN,
@@ -54,6 +57,16 @@ ARM_MODES = {
     "night": "async_handle_alarm_arm_night",
 }
 DONE = {"wynik": "ok"}
+
+
+def _kind(value: Any) -> str:
+    """1.5.0: the PIN's kind - checked here, not by the schema (a refused
+    message is logged whole, with its PIN)."""
+    if value is None:
+        return PIN_KIND_NORMAL
+    if isinstance(value, str) and value in PIN_KINDS:
+        return value
+    raise alarm_error("unknown_pin_kind")
 
 
 @callback
@@ -214,6 +227,7 @@ async def websocket_disarm(
         vol.Required(ATTR_PIN): object,
         vol.Optional(ATTR_CURRENT_PIN): object,
         vol.Optional(ATTR_ENTITY_ID): object,
+        vol.Optional(PIN_KIND): object,
     }
 )
 @websocket_api.async_response
@@ -232,6 +246,7 @@ async def websocket_set_pin(
             as_pin(msg[ATTR_PIN]),
             _optional_pin(msg.get(ATTR_CURRENT_PIN)),
             connection.context(msg),
+            _kind(msg.get(PIN_KIND)),
         )
     except HomeAssistantError as err:
         _send_error(connection, msg["id"], err)
@@ -244,6 +259,7 @@ async def websocket_set_pin(
         vol.Required("type"): WS_CLEAR_PIN,
         vol.Required(ATTR_USER_ID): object,
         vol.Optional(ATTR_ENTITY_ID): object,
+        vol.Optional(PIN_KIND): object,
     }
 )
 @websocket_api.async_response
@@ -260,6 +276,7 @@ async def websocket_clear_pin(
             checked_caller(connection.user, admin=True),
             _text(msg[ATTR_USER_ID], "unknown_user"),
             connection.context(msg),
+            _kind(msg.get(PIN_KIND)),
         )
     except HomeAssistantError as err:
         _send_error(connection, msg["id"], err)

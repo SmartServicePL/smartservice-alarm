@@ -14,6 +14,13 @@ set_pin:
       selector:
         text:
           type: password
+    rodzaj:
+      default: pin
+      selector:
+        select:
+          options:
+            - pin
+            - przymus
     entity_id:
       selector:
         entity:
@@ -26,6 +33,13 @@ clear_pin:
       required: true
       selector:
         text:
+    rodzaj:
+      default: pin
+      selector:
+        select:
+          options:
+            - pin
+            - przymus
     entity_id:
       selector:
         entity:

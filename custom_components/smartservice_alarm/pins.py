@@ -35,7 +35,10 @@ from .const import (
     ACTION_WRONG_CODE,
     CONF_KIND,
     DOMAIN,
+    EVENT_DURESS,
     KIND_PINS,
+    PIN_KIND_DURESS,
+    PIN_KIND_NORMAL,
     STORAGE_VERSION,
 )
 
@@ -75,6 +78,9 @@ GLOBAL_LOCK = timedelta(minutes=15)
 KEY_PINS = "piny"
 KEY_LOCKOUTS = "blokady"
 KEY_STATE = "stan"
+# 1.5.0: the PINs used under duress, kept like the PINs (scrypt, own salt).
+KEY_DURESS = "przymus"
+_KEYS = (KEY_PINS, KEY_LOCKOUTS, KEY_STATE, KEY_DURESS)
 
 
 def alarm_error(key: str, **placeholders: str) -> ServiceValidationError:
@@ -276,7 +282,7 @@ class PinManager:
             private=True,
             atomic_writes=True,
         )
-        self._data: dict[str, Any] = {KEY_PINS: {}, KEY_LOCKOUTS: {}, KEY_STATE: {}}
+        self._data: dict[str, Any] = {key: {} for key in _KEYS}
         self._lock = asyncio.Lock()
         # Platforms set up for this entry (none when it keeps only PINs).
         self.platforms: list[str] = []
@@ -284,6 +290,11 @@ class PinManager:
     @property
     def pins(self) -> dict[str, dict[str, Any]]:
         return self._data[KEY_PINS]
+
+    @property
+    def duress(self) -> dict[str, dict[str, Any]]:
+        """1.5.0: PINs used under duress (user id -> record)."""
+        return self._data[KEY_DURESS]
 
     @property
     def lockouts(self) -> dict[str, dict[str, Any]]:
@@ -301,7 +312,7 @@ class PinManager:
     async def async_load(self) -> None:
         stored = await self._store.async_load()
         if isinstance(stored, dict):
-            for key in (KEY_PINS, KEY_LOCKOUTS, KEY_STATE):
+            for key in _KEYS:
                 if isinstance(stored.get(key), dict):
                     self._data[key] = stored[key]
 
@@ -314,10 +325,11 @@ class PinManager:
     def remove_unknown_users(self, known: set[str]) -> bool:
         """Drop PINs and lockouts of deleted users."""
         changed = False
-        for user_id in list(self.pins):
-            if user_id not in known:
-                del self.pins[user_id]
-                changed = True
+        for records in (self.pins, self.duress):
+            for user_id in list(records):
+                if user_id not in known:
+                    del records[user_id]
+                    changed = True
         for bucket in list(self.lockouts):
             if bucket not in (NO_ACCOUNT, WHOLE_PANEL) and bucket not in known:
                 del self.lockouts[bucket]
@@ -327,6 +339,9 @@ class PinManager:
     def has_pin(self, user_id: str) -> bool:
         return user_id in self.pins
 
+    def has_duress(self, user_id: str) -> bool:
+        return user_id in self.duress
+
     def locked_until(self, bucket: str) -> datetime | None:
         return self.book.locked_until(bucket, dt_util.utcnow())
 
@@ -335,16 +350,50 @@ class PinManager:
             ALARM_DOMAIN, DOMAIN, self.entry_id
         )
 
-    async def _async_owners(self, pin: str) -> list[str]:
-        """Users whose PIN equals the given one; hashes every stored PIN."""
-        records = list(self.pins.items())
+    async def _async_match(self, pin: str) -> tuple[list[str], list[str]]:
+        """Users whose PIN and whose duress PIN equal the given one.
+
+        Hashes every stored PIN of both kinds every time, so the work does not
+        tell which kind matched, or whether any did."""
+        records = [(user_id, record, False) for user_id, record in self.pins.items()]
+        records += [(user_id, record, True) for user_id, record in self.duress.items()]
         results = await asyncio.gather(
             *(
                 self.hass.async_add_executor_job(record_matches, record, pin)
-                for _, record in records
+                for _, record, _ in records
             )
         )
-        return [user_id for (user_id, _), ok in zip(records, results, strict=True) if ok]
+        matched = [
+            (user_id, duress)
+            for (user_id, _, duress), ok in zip(records, results, strict=True)
+            if ok
+        ]
+        return (
+            [user_id for user_id, duress in matched if not duress],
+            [user_id for user_id, duress in matched if duress],
+        )
+
+    async def _async_owner(self, pin: str, context: Context | None) -> str | None:
+        """The one user the code belongs to (either kind), or None.
+
+        1.5.0: a duress PIN gives its owner exactly like his PIN does; the
+        only extra is the duress event (never a logbook entry, never the PIN).
+        """
+        owners, duress = await self._async_match(pin)
+        if len(owners) + len(duress) != 1:
+            return None
+        if duress:
+            self.hass.bus.async_fire(
+                EVENT_DURESS,
+                {
+                    "entity_id": self._entity_id(),
+                    "wlasciciel_id": duress[0],
+                    "czas": dt_util.utcnow().isoformat(),
+                },
+                context=context,
+            )
+            return duress[0]
+        return owners[0]
 
     def _raise_if_locked(self, bucket: str) -> None:
         if (until := self.locked_until(bucket)) is not None:
@@ -436,9 +485,7 @@ class PinManager:
             if (until := await self._async_lock_end(bucket)) is not None:
                 # Locked: the PIN is not even hashed.
                 return EntryCheck(locked_until=until)
-            owners = await self._async_owners(code)
-            if len(owners) == 1:
-                owner = owners[0]
+            if (owner := await self._async_owner(code, context)) is not None:
                 await events.async_fire(
                     self.hass,
                     self._entity_id(),
@@ -465,11 +512,10 @@ class PinManager:
         async with self._lock:
             self._raise_if_locked(bucket)
             await self._async_raise_if_panel_locked(bucket)
-            owners = await self._async_owners(code)
-            if len(owners) == 1:
+            if (owner := await self._async_owner(code, context)) is not None:
                 # A correct code does not clear the wrong-code streak; it
                 # expires after FAILURE_MEMORY (see LockoutBook).
-                return owners[0]
+                return owner
             raise await self._async_fail(bucket, "wrong_pin", context)
 
     async def async_set_pin(
@@ -481,6 +527,7 @@ class PinManager:
         bucket: str,
         current_pin: str | None,
         context: Context | None,
+        kind: str = PIN_KIND_NORMAL,
     ) -> None:
         """Set a PIN after checking rules, the current PIN and uniqueness.
 
@@ -492,9 +539,20 @@ class PinManager:
         1.4.1: a normal user only changes his own existing PIN; the first PIN
         comes from an administrator. The refusal is not a failed attempt -
         nothing is guessed.
+
+        1.5.0 (``kind`` "przymus"): the duress PIN of somebody who has a PIN.
+        The same rules: an administrator sets it for anyone; a user only
+        changes his own existing one, with his current (normal) PIN. Every PIN
+        of both kinds is different - a collision with the user's own other PIN
+        is refused without counting (he knows it), with anybody else's it
+        counts as above.
         """
+        duress = kind == PIN_KIND_DURESS
+        records = self.duress if duress else self.pins
         async with self._lock:
-            if not admin and target_id not in self.pins:
+            if duress and target_id not in self.pins:
+                raise alarm_error("duress_needs_pin")
+            if not admin and target_id not in records:
                 raise alarm_error("first_pin_by_admin")
             if not admin:
                 self._raise_if_locked(bucket)
@@ -505,33 +563,44 @@ class PinManager:
             if check_current and not current_pin:
                 raise alarm_error("current_pin_required")
 
-            jobs = [self._async_owners(pin)]
+            match = self._async_match(pin)
             if check_current:
-                jobs.append(
+                owners_both, current_ok = await asyncio.gather(
+                    match,
                     self.hass.async_add_executor_job(
                         record_matches, self.pins[target_id], current_pin
-                    )
+                    ),
                 )
-            results = await asyncio.gather(*jobs)
-            owners: list[str] = results[0]
+            else:
+                owners_both, current_ok = await match, True
+            owners, duress_owners = owners_both
 
-            if check_current and not results[1]:
+            if not current_ok:
                 raise await self._async_fail(bucket, "wrong_current_pin", context)
-            if any(owner != target_id for owner in owners):
-                if admin:
+            # The record being replaced is the only match that is allowed.
+            taken = [owner for owner in owners if duress or owner != target_id]
+            taken += [owner for owner in duress_owners if not duress or owner != target_id]
+            if taken:
+                if admin or all(owner == target_id for owner in taken):
                     raise alarm_error("pin_taken")
                 raise await self._async_fail(bucket, "pin_taken", context)
 
             record = await self.hass.async_add_executor_job(
                 new_record, pin, dt_util.now()
             )
-            self.pins[target_id] = record
+            records[target_id] = record
             await self.async_save()
 
-    async def async_clear_pin(self, user_id: str) -> bool:
+    async def async_clear_pin(self, user_id: str, kind: str = PIN_KIND_NORMAL) -> bool:
+        """Remove a PIN; without his PIN a user's duress PIN goes too (1.5.0)."""
         async with self._lock:
-            if self.pins.pop(user_id, None) is None:
-                return False
+            if kind == PIN_KIND_DURESS:
+                if self.duress.pop(user_id, None) is None:
+                    return False
+            else:
+                if self.pins.pop(user_id, None) is None:
+                    return False
+                self.duress.pop(user_id, None)
             await self.async_save()
             return True
 
