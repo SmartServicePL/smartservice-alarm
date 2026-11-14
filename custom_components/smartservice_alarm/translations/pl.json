@@ -82,6 +82,7 @@
     "user_required": { "message": "Ta czynność wymaga zalogowanego użytkownika." },
     "admin_required": { "message": "Tylko administrator może to zrobić." },
     "own_pin_only": { "message": "Możesz ustawić tylko własny PIN." },
+    "first_pin_by_admin": { "message": "Pierwszy PIN ustawia administrator." },
     "unknown_user": { "message": "Nie ma takiego użytkownika." },
     "unknown_alarm": { "message": "To nie jest centrala Smart Service Alarm." },
     "choose_alarm": { "message": "Skonfigurowano kilka central alarmu — wskaż centralę (entity_id)." }
@@ -89,7 +90,7 @@
   "services": {
     "set_pin": {
       "name": "Ustaw PIN",
-      "description": "Ustawia PIN alarmu użytkownika. Administrator ustawia go każdemu; użytkownik tylko sobie, podając obecny PIN, jeśli już go ma.",
+      "description": "Ustawia PIN alarmu użytkownika. Administrator ustawia go każdemu; użytkownik może tylko zmienić swój istniejący PIN, podając obecny. Pierwszy PIN ustawia administrator.",
       "fields": {
         "user_id": { "name": "ID użytkownika", "description": "ID użytkownika, do którego należy PIN." },
         "pin": { "name": "PIN", "description": "Nowy PIN: od 4 do 8 cyfr, inny niż PIN-y pozostałych użytkowników." },

@@ -488,14 +488,21 @@ class PinManager:
         else's PIN both count as a failed attempt, so set_pin cannot be used
         to find out other people's PINs. An administrator's collision is
         refused but not counted.
+
+        1.4.1: a normal user only changes his own existing PIN. The first PIN
+        comes from an administrator: every PIN disarms the panel, so an
+        account must not give itself one (a child's, a TV's, a read-only
+        account). The refusal is not a failed attempt - nothing is guessed.
         """
         async with self._lock:
+            if not admin and target_id not in self.pins:
+                raise alarm_error("first_pin_by_admin")
             if not admin:
                 self._raise_if_locked(bucket)
                 await self._async_raise_if_panel_locked(bucket)
             if (problem := pin_problem(pin)) is not None:
                 raise alarm_error(problem)
-            check_current = not admin and target_id in self.pins
+            check_current = not admin
             if check_current and not current_pin:
                 raise alarm_error("current_pin_required")
 

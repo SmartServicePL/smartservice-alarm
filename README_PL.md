@@ -100,7 +100,7 @@ pomijania i wymuszania.
 
 | Usługa | Pola | Kto |
 |---|---|---|
-| `smartservice_alarm.set_pin` | `user_id`, `pin`, `current_pin` (opcjonalnie), `entity_id` (opcjonalnie) | administrator każdemu; użytkownik tylko sobie, z `current_pin`, gdy już ma PIN |
+| `smartservice_alarm.set_pin` | `user_id`, `pin`, `current_pin` (opcjonalnie), `entity_id` (opcjonalnie) | administrator każdemu; użytkownik tylko zmienia swój istniejący PIN, z `current_pin` (pierwszy PIN ustawia administrator) |
 | `smartservice_alarm.clear_pin` | `user_id`, `entity_id` (opcjonalnie) | administrator |
 | `smartservice_alarm.unlock` | `user_id` (albo `_bez_konta`), `entity_id` (opcjonalnie) | administrator |
 | `smartservice_alarm.status` | `entity_id` (opcjonalnie) | administrator; zwraca `{user_id: {"pin": bool, "zablokowany_do": ISO albo null}}` |
@@ -182,6 +182,10 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   przetrwają restart.
 - **Bez wyroczni PIN-ów.** U zwykłego użytkownika `set_pin` z cudzym PIN-em
   i błędny `current_pin` liczą się jako nieudane próby.
+- **Pierwszy PIN ustawia administrator.** Każdy PIN rozbraja centralę, więc
+  konto nie może nadać go samo sobie (konto dziecka, telewizora ani konto
+  tylko do odczytu): zwykły użytkownik bez PIN-u dostaje odmowę `set_pin`
+  (`first_pin_by_admin`).
 - PIN-y i blokady usuniętych użytkowników są usuwane.
 - Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi nigdy
   nie zawierają PIN-u, skrótu ani soli.

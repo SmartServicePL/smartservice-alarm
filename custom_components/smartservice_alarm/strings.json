@@ -82,6 +82,7 @@
     "user_required": { "message": "This action requires a signed-in user." },
     "admin_required": { "message": "Only an administrator can do this." },
     "own_pin_only": { "message": "You can only set your own PIN." },
+    "first_pin_by_admin": { "message": "Your first PIN is set by an administrator." },
     "unknown_user": { "message": "There is no such user." },
     "unknown_alarm": { "message": "This is not a Smart Service Alarm panel." },
     "choose_alarm": { "message": "Several alarm panels are configured — select the alarm panel (entity_id)." }
@@ -89,7 +90,7 @@
   "services": {
     "set_pin": {
       "name": "Set PIN",
-      "description": "Sets the alarm PIN of a user. An administrator can set it for anyone; a user only for himself, with the current PIN if he already has one.",
+      "description": "Sets the alarm PIN of a user. An administrator can set it for anyone; a user can only change his own existing PIN, with the current PIN. The first PIN is set by an administrator.",
       "fields": {
         "user_id": { "name": "User ID", "description": "ID of the user who owns the PIN." },
         "pin": { "name": "PIN", "description": "New PIN: 4 to 8 digits, different from the PINs of other users." },

@@ -96,7 +96,7 @@ sensor that is `unavailable`, `unknown` or missing refuses it with
 
 | Action | Fields | Who |
 |---|---|---|
-| `smartservice_alarm.set_pin` | `user_id`, `pin`, `current_pin` (optional), `entity_id` (optional) | administrator for anyone; a user only for himself, with `current_pin` when he already has a PIN |
+| `smartservice_alarm.set_pin` | `user_id`, `pin`, `current_pin` (optional), `entity_id` (optional) | administrator for anyone; a user only changes his own existing PIN, with `current_pin` (the first PIN is set by an administrator) |
 | `smartservice_alarm.clear_pin` | `user_id`, `entity_id` (optional) | administrator |
 | `smartservice_alarm.unlock` | `user_id` (or `_bez_konta`), `entity_id` (optional) | administrator |
 | `smartservice_alarm.status` | `entity_id` (optional) | administrator; returns `{user_id: {"pin": bool, "zablokowany_do": ISO or null}}` |
@@ -175,6 +175,10 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   survive a restart.
 - **No PIN oracle.** For a normal user, a `set_pin` that collides with somebody
   else's PIN and a wrong `current_pin` both count as failed attempts.
+- **The first PIN comes from an administrator.** Every PIN disarms the panel,
+  so an account cannot give itself one (a child's, a TV's or a read-only
+  account): without a PIN, a normal user's `set_pin` is refused
+  (`first_pin_by_admin`).
 - PINs and lockouts of deleted users are removed.
 - Diagnostics redact salts and hashes; `status`, attributes, events and logs
   never contain a PIN, a hash or a salt.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1
+
+- Security fix: a user who is not an administrator can no longer give
+  himself a first PIN with `set_pin` (action or websocket command). Every PIN
+  disarms the panel, so before this any signed-in account without a PIN
+  (also a read-only one) could set one and disarm with it. Now only an
+  administrator sets the first PIN; a user only changes his own existing PIN,
+  with `current_pin`. The refusal (`first_pin_by_admin`) is not counted as a
+  failed attempt.
+- After updating, an administrator should check with `status` who has a PIN
+  and remove (`clear_pin`) any PIN he did not set himself.
+
 ## 1.4.0
 
 - Websocket commands for everything that carries a PIN:

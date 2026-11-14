@@ -67,7 +67,8 @@ async def async_set_pin_for(
     current_pin: str | None,
     context: Context | None,
 ) -> None:
-    """Set a PIN: an administrator for anyone, a user only for himself."""
+    """Set a PIN: an administrator for anyone; a user only changes his own
+    existing PIN (the first one comes from an administrator, see pins.py)."""
     if not caller.is_admin and target_id != caller.id:
         raise alarm_error("own_pin_only")
     await async_target_user(hass, target_id)
