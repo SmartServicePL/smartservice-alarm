@@ -194,15 +194,18 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   pasował. Ustawienie i usunięcie PIN-u pod przymusem nie zostawia wpisu
   w dzienniku.
 - PIN-y i blokady usuniętych użytkowników są usuwane.
-- Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi nigdy
-  nie zawierają PIN-u, skrótu ani soli.
+- Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi
+  integracji nigdy nie zawierają PIN-u, skrótu ani soli.
 - „Kod domyślny” z ustawień encji alarmu jest celowo pomijany.
 - Sprawdzenie PIN-u dla widoku w panelu (`smartservice_alarm/check_pin`) to
   polecenie websocket, więc jego PIN nigdy nie trafia do zdarzenia
-  `call_service` ani do bazy recordera. Tylko własny log debugowania API
-  websocket w Home Assistant (`homeassistant.components.websocket_api`,
-  domyślnie wyłączony) zapisuje każdą odebraną wiadomość — także ten PIN, tak
-  jak tokeny dostępu; na co dzień zostaw go wyłączony.
+  `call_service` ani do bazy recordera.
+- Własny log debugowania API websocket w Home Assistant
+  (`homeassistant.components.websocket_api`) jest domyślnie wyłączony. Po
+  włączeniu zapisuje jawnie każdą odebraną wiadomość — także PIN każdego
+  polecenia websocket (`set_pin`, `check_pin`, `arm`, `disarm`, również PIN
+  pod przymusem), tak jak tokeny dostępu. Integracja nie ma na to wpływu; na
+  co dzień zostaw ten log wyłączony, a po szukaniu błędu wyłącz go z powrotem.
 
 ### Uzbrajanie, rozbrajanie i PIN-y bez rejestratora (websocket)
 

@@ -187,15 +187,19 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   tell which kind matched. Setting or removing a duress PIN leaves no logbook
   entry.
 - PINs and lockouts of deleted users are removed.
-- Diagnostics redact salts and hashes; `status`, attributes, events and logs
-  never contain a PIN, a hash or a salt.
+- Diagnostics redact salts and hashes; `status`, attributes, events and the
+  integration's logs never contain a PIN, a hash or a salt.
 - The *default code* of the alarm entity settings is ignored on purpose.
 - The PIN check for a dashboard view (`smartservice_alarm/check_pin`) is a
   websocket command, so its PIN is never in a `call_service` event or the
-  recorder's database. Only Home Assistant's own debug log of the websocket
-  API (`homeassistant.components.websocket_api`, off by default) writes every
-  received message - this PIN too, as it does with access tokens; keep it off
-  in normal use.
+  recorder's database.
+- Home Assistant's own debug log of the websocket API
+  (`homeassistant.components.websocket_api`) is off by default. When it is
+  switched on, it writes every received message in plain text - the PIN of
+  every websocket command too (`set_pin`, `check_pin`, `arm`, `disarm`, the
+  duress PIN as well), as it does with access tokens. The integration cannot
+  change that; keep this log off in normal use and switch it off again after
+  a debugging session.
 
 ### Arming, disarming and PINs without the recorder (websocket)
 
