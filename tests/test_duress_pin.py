@@ -21,6 +21,7 @@ from pytest_homeassistant_custom_component.common import CLIENT_ID, MockUser
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
+from custom_components.smartservice_alarm import pins as pins_module
 from custom_components.smartservice_alarm.const import (
     EVENT_ALARM,
     EVENT_DURESS,
@@ -349,9 +350,15 @@ async def test_the_store_keeps_only_a_salt_and_a_scrypt_hash(
     for name, record in records.items():
         # Only the salt, the hash, scrypt's parameters and the change's time.
         assert set(record) == {"salt", "hash", "n", "r", "p", "zmieniono"}, name
-        assert len(base64.b64decode(record["salt"], validate=True)) >= 16, name
-        assert len(base64.b64decode(record["hash"], validate=True)) >= 32, name
-        assert int(record["n"]) >= 2**14, name
+        assert len(base64.b64decode(record["salt"], validate=True)) == pins_module.SALT_BYTES
+        assert len(base64.b64decode(record["hash"], validate=True)) == pins_module.SCRYPT_DKLEN
+        # The parameters in force (the fixture lowers N and r for speed; the
+        # production values are pinned by test_pins.test_production_parameters).
+        assert (record["n"], record["r"], record["p"]) == (
+            pins_module.SCRYPT_N,
+            pins_module.SCRYPT_R,
+            pins_module.SCRYPT_P,
+        ), name
     # Each record is the scrypt of its own PIN (and of no other).
     assert record_matches(records[f"przymus:{users.piotr.id}"], WS_DURESS)
     assert not record_matches(records[f"przymus:{users.piotr.id}"], pins["piotr"])
