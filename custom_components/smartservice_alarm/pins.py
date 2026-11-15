@@ -35,7 +35,8 @@ from .const import (
     ACTION_WRONG_CODE,
     CONF_KIND,
     DOMAIN,
-    EVENT_DURESS,
+    EVENT_CODE,
+    EVENT_CODE_DURESS,
     KIND_PINS,
     PIN_KIND_DURESS,
     PIN_KIND_NORMAL,
@@ -373,27 +374,60 @@ class PinManager:
             [user_id for user_id, duress in matched if duress],
         )
 
+    def _fire_code(
+        self, context: Context | None, owner: str | None, duress: bool
+    ) -> None:
+        """1.5.0: the one event of every code attempt (never the PIN).
+
+        Fired for a right, a wrong and a locked attempt alike, so an
+        automation on it leaves the same logbook entry whatever the code was;
+        only the field ``przymus`` (true for a duress PIN) tells them apart.
+        """
+        self.hass.bus.async_fire(
+            EVENT_CODE,
+            {
+                "entity_id": self._entity_id(),
+                "wlasciciel_id": owner,
+                EVENT_CODE_DURESS: duress,
+                "czas": dt_util.utcnow().isoformat(),
+            },
+            context=context,
+        )
+
     async def _async_owner(self, pin: str, context: Context | None) -> str | None:
         """The one user the code belongs to (either kind), or None.
 
-        1.5.0: a duress PIN gives its owner exactly like his PIN does; the
-        only extra is the duress event (never a logbook entry, never the PIN).
+        1.5.0: a duress PIN gives its owner exactly like his PIN does; every
+        attempt fires the code event (``przymus`` true only for a duress PIN).
         """
         owners, duress = await self._async_match(pin)
         if len(owners) + len(duress) != 1:
+            self._fire_code(context, None, False)
             return None
-        if duress:
-            self.hass.bus.async_fire(
-                EVENT_DURESS,
-                {
-                    "entity_id": self._entity_id(),
-                    "wlasciciel_id": duress[0],
-                    "czas": dt_util.utcnow().isoformat(),
-                },
-                context=context,
+        owner = (duress or owners)[0]
+        self._fire_code(context, owner, bool(duress))
+        return owner
+
+    async def _async_locked_attempt(self, pin: str, context: Context | None) -> None:
+        """1.5.0: an attempt during a lock - the code is not accepted, but a
+        right duress PIN still calls for help (the silent alarm).
+
+        Only the duress PINs are hashed (every one, every time), so the work
+        during a lock never depends on the code; the event is fired for every
+        locked attempt alike.
+        """
+        records = list(self.duress.items())
+        results = await asyncio.gather(
+            *(
+                self.hass.async_add_executor_job(record_matches, record, pin)
+                for _, record in records
             )
-            return duress[0]
-        return owners[0]
+        )
+        found = [user_id for (user_id, _), ok in zip(records, results, strict=True) if ok]
+        if len(found) == 1:
+            self._fire_code(context, found[0], True)
+        else:
+            self._fire_code(context, None, False)
 
     def _raise_if_locked(self, bucket: str) -> None:
         if (until := self.locked_until(bucket)) is not None:
@@ -483,7 +517,9 @@ class PinManager:
                 # does not open the view: "always a PIN").
                 return EntryCheck(no_pins=True)
             if (until := await self._async_lock_end(bucket)) is not None:
-                # Locked: the PIN is not even hashed.
+                # Locked: the PIN is not accepted (1.5.0: a duress PIN still
+                # calls for help).
+                await self._async_locked_attempt(code, context)
                 return EntryCheck(locked_until=until)
             if (owner := await self._async_owner(code, context)) is not None:
                 await events.async_fire(
@@ -510,8 +546,10 @@ class PinManager:
     ) -> str:
         """Return the owner of the code or raise; counts wrong codes."""
         async with self._lock:
-            self._raise_if_locked(bucket)
-            await self._async_raise_if_panel_locked(bucket)
+            if (until := await self._async_lock_end(bucket)) is not None:
+                # 1.5.0: a duress PIN still calls for help during a lock.
+                await self._async_locked_attempt(code, context)
+                raise lockout_error(until)
             if (owner := await self._async_owner(code, context)) is not None:
                 # A correct code does not clear the wrong-code streak; it
                 # expires after FAILURE_MEMORY (see LockoutBook).
@@ -546,17 +584,26 @@ class PinManager:
         of both kinds is different - a collision with the user's own other PIN
         is refused without counting (he knows it), with anybody else's it
         counts as above.
+
+        A user's current PIN is checked first (counted when wrong), against
+        every stored PIN of both kinds - only then may an answer depend on
+        whether he has a duress PIN, so nothing tells it without a PIN. His
+        duress PIN given as the current one is accepted like his PIN: the code
+        event says ``przymus`` (the silent alarm) and the new PIN replaces the
+        duress PIN, never his PIN - whoever forced the code keeps a code that
+        calls for help.
         """
         duress = kind == PIN_KIND_DURESS
-        records = self.duress if duress else self.pins
         async with self._lock:
             if duress and target_id not in self.pins:
                 raise alarm_error("duress_needs_pin")
-            if not admin and target_id not in records:
+            if not admin and target_id not in self.pins:
+                # No PIN at all: nothing to guess and no duress PIN either.
                 raise alarm_error("first_pin_by_admin")
-            if not admin:
-                self._raise_if_locked(bucket)
-                await self._async_raise_if_panel_locked(bucket)
+            if not admin and (until := await self._async_lock_end(bucket)) is not None:
+                if current_pin:
+                    await self._async_locked_attempt(current_pin, context)
+                raise lockout_error(until)
             if (problem := pin_problem(pin)) is not None:
                 raise alarm_error(problem)
             check_current = not admin
@@ -565,18 +612,33 @@ class PinManager:
 
             match = self._async_match(pin)
             if check_current:
-                owners_both, current_ok = await asyncio.gather(
-                    match,
-                    self.hass.async_add_executor_job(
-                        record_matches, self.pins[target_id], current_pin
-                    ),
+                owners_both, current_both = await asyncio.gather(
+                    match, self._async_match(current_pin or "")
+                )
+                current_owners, current_duress = current_both
+                current_is_duress = (
+                    len(current_owners) + len(current_duress) == 1
+                    and current_duress == [target_id]
+                )
+                current_ok = current_is_duress or (
+                    len(current_owners) + len(current_duress) == 1
+                    and current_owners == [target_id]
+                )
+                self._fire_code(
+                    context, target_id if current_ok else None, current_is_duress
                 )
             else:
-                owners_both, current_ok = await match, True
+                owners_both, current_ok, current_is_duress = await match, True, False
             owners, duress_owners = owners_both
 
             if not current_ok:
                 raise await self._async_fail(bucket, "wrong_current_pin", context)
+            if current_is_duress:
+                # W-1: the change goes to the duress PIN, whatever was asked.
+                duress = True
+            elif not admin and duress and target_id not in self.duress:
+                raise alarm_error("first_pin_by_admin")
+            records = self.duress if duress else self.pins
             # The record being replaced is the only match that is allowed.
             taken = [owner for owner in owners if duress or owner != target_id]
             taken += [owner for owner in duress_owners if not duress or owner != target_id]

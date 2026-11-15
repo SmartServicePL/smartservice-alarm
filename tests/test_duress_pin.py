@@ -24,7 +24,7 @@ from homeassistant.exceptions import ServiceValidationError
 from custom_components.smartservice_alarm import pins as pins_module
 from custom_components.smartservice_alarm.const import (
     EVENT_ALARM,
-    EVENT_DURESS,
+    EVENT_CODE,
     WS_CHECK_PIN,
     WS_CLEAR_PIN,
     WS_DISARM,
@@ -67,6 +67,14 @@ def _without_time(events: list[Event]) -> list[dict[str, Any]]:
     return [dict(event.data) for event in events]
 
 
+def _calls(events: list[Event]) -> list[Event]:
+    """The code events of a duress PIN (the silent alarm)."""
+    return [event for event in events if event.data["przymus"] is True]
+
+
+CODE_KEYS = {"entity_id", "wlasciciel_id", "przymus", "czas"}
+
+
 # -- ustawianie ----------------------------------------------------------------
 
 
@@ -102,11 +110,6 @@ async def test_a_user_changes_only_his_existing_one(hass, users, loaded) -> None
     # His own, with his (normal) PIN.
     await _set_duress(hass, users.piotr, users.piotr, "3816", pins["piotr"])
     assert record_matches(manager.duress[users.piotr.id], "3816")
-    # The current duress PIN is not his PIN for this.
-    with pytest.raises(ServiceValidationError) as err:
-        await _set_duress(hass, users.piotr, users.piotr, "5927", "3816")
-    assert err.value.translation_key == "wrong_current_pin"
-    assert manager.lockouts[users.piotr.id]["nieudane"] == 1
     # Not somebody else's.
     with pytest.raises(ServiceValidationError) as err:
         await _set_duress(hass, users.piotr, users.adam, "5927", pins["piotr"])
@@ -149,6 +152,55 @@ async def test_every_pin_of_both_kinds_is_different(hass, users, loaded) -> None
     assert users.admin.id not in manager.lockouts
 
 
+async def test_his_duress_pin_as_the_current_one_changes_the_duress_pin(
+    hass, users, loaded
+) -> None:
+    """W-1: „change PIN” with the duress PIN as the current one is accepted
+    like his PIN; the silent alarm goes and the duress PIN gets the new one."""
+    pins = await give_pins(hass, users)
+    await _set_duress(hass, users.admin, users.piotr, DURESS)
+    manager = manager_of(loaded)
+    # A real change first, for the same answer and logbook entries.
+    normal_alarm = _listen(hass, EVENT_ALARM)
+    normal_codes = _listen(hass, EVENT_CODE)
+    change = {"user_id": users.piotr.id, "pin": "2749", "current_pin": pins["piotr"]}
+    await service(hass, "set_pin", users.piotr, change)
+    await hass.async_block_till_done()
+    assert record_matches(manager.pins[users.piotr.id], "2749")
+    forced_alarm = _listen(hass, EVENT_ALARM)
+    forced_codes = _listen(hass, EVENT_CODE)
+    forced = {"user_id": users.piotr.id, "pin": "5927", "current_pin": DURESS}
+    await service(hass, "set_pin", users.piotr, forced)
+    await hass.async_block_till_done()
+    # Answered like a change; his PIN untouched, the duress PIN is the new one.
+    assert record_matches(manager.pins[users.piotr.id], "2749")
+    assert record_matches(manager.duress[users.piotr.id], "5927")
+    assert manager.lockouts == {}
+    actions = [e.data.get("akcja") for e in forced_alarm]
+    assert actions == [e.data.get("akcja") for e in normal_alarm[: len(forced_alarm)]]
+    first = normal_codes[: len(normal_codes) - len(forced_codes)]
+    assert [e.data["przymus"] for e in first] == [False]
+    assert [e.data["przymus"] for e in forced_codes] == [True]
+    assert forced_codes[0].data["wlasciciel_id"] == users.piotr.id
+
+
+async def test_nothing_tells_a_duress_pin_without_the_pin(hass, users, loaded) -> None:
+    """W-2: a user's current PIN is checked (and counted) first - the answer
+    without it is the same whether he has a duress PIN or not."""
+    await give_pins(hass, users)
+    manager = manager_of(loaded)
+    answers = []
+    for setup in (False, True):
+        if setup:
+            manager.book.unlock(users.piotr.id)
+            await _set_duress(hass, users.admin, users.piotr, DURESS)
+        with pytest.raises(ServiceValidationError) as err:
+            await _set_duress(hass, users.piotr, users.piotr, "5927", "9999")
+        answers.append(err.value.translation_key)
+        assert manager.lockouts[users.piotr.id]["nieudane"] >= 1
+    assert answers == ["wrong_current_pin", "wrong_current_pin"]
+
+
 # -- działanie -----------------------------------------------------------------
 
 
@@ -160,13 +212,15 @@ async def test_it_disarms_exactly_like_his_pin(hass, users, loaded) -> None:
     # With his PIN.
     await alarm(hass, "alarm_arm_away", users.adam, pins["adam"])
     normal = _listen(hass, EVENT_ALARM)
+    normal_codes = _listen(hass, EVENT_CODE)
     await alarm(hass, "alarm_disarm", users.tablet, pins["piotr"])
     await hass.async_block_till_done()
     normal_state = hass.states.get(ENTITY)
+    normal_codes = list(normal_codes)
 
     # With his duress PIN.
     await alarm(hass, "alarm_arm_away", users.adam, pins["adam"])
-    duress_found = _listen(hass, EVENT_DURESS)
+    codes = _listen(hass, EVENT_CODE)
     alarm_found = _listen(hass, EVENT_ALARM)
     await alarm(hass, "alarm_disarm", users.tablet, DURESS)
     await hass.async_block_till_done()
@@ -178,32 +232,36 @@ async def test_it_disarms_exactly_like_his_pin(hass, users, loaded) -> None:
     assert current.attributes["changed_by"] == "Piotr"
     assert _without_time(alarm_found) == _without_time(normal[: len(alarm_found)])
     assert [event.data.get("akcja") for event in alarm_found] == ["rozbrojenie"]
-    assert all("napad" not in str(event.data) for event in alarm_found)
-    assert len(duress_found) == 1
-    data = duress_found[0].data
-    assert set(data) == {"entity_id", "wlasciciel_id", "czas"}
+    assert all("przymus" not in str(event.data) for event in alarm_found)
+    # One code event each time, the same keys; only „przymus” differs.
+    assert len(codes) == len(normal_codes[:1]) == 1
+    assert set(codes[0].data) == set(normal_codes[0].data) == CODE_KEYS
+    assert normal_codes[0].data["przymus"] is False
+    data = codes[0].data
+    assert data["przymus"] is True
     assert (data["entity_id"], data["wlasciciel_id"]) == (ENTITY, users.piotr.id)
+    assert normal_codes[0].data["wlasciciel_id"] == users.piotr.id
     assert DURESS not in str(data) and pins["piotr"] not in str(data)
-    assert duress_found[0].context.user_id == users.tablet.id
+    assert codes[0].context.user_id == users.tablet.id
 
 
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_it_arms_like_his_pin_and_calls(hass, users, loaded) -> None:
     await give_pins(hass, users)
     await _set_duress(hass, users.admin, users.piotr, DURESS)
-    duress_found = _listen(hass, EVENT_DURESS)
+    codes = _listen(hass, EVENT_CODE)
     await alarm(hass, "alarm_arm_home", users.piotr, DURESS)
     await hass.async_block_till_done()
     current = hass.states.get(ENTITY)
     assert current.state == "armed_home"
     assert current.attributes["changed_by"] == "Piotr"
-    assert [event.data["wlasciciel_id"] for event in duress_found] == [users.piotr.id]
+    assert [event.data["wlasciciel_id"] for event in _calls(codes)] == [users.piotr.id]
 
 
 async def test_the_entry_to_security_and_the_websocket(hass, users, loaded, hass_ws_client) -> None:
     pins = await give_pins(hass, users)
     await _set_duress(hass, users.admin, users.piotr, DURESS)
-    duress_found = _listen(hass, EVENT_DURESS)
+    codes = _listen(hass, EVENT_CODE)
     client = await _client(hass, hass_ws_client, users.tablet)
 
     normal = await _send(client, WS_CHECK_PIN, pin=pins["piotr"])
@@ -212,19 +270,21 @@ async def test_the_entry_to_security_and_the_websocket(hass, users, loaded, hass
     assert forced["result"] == {**forced["result"], "wynik": "poprawny", "osoba": "Piotr"}
     assert (await _send(client, WS_DISARM, code=DURESS))["result"] == {"wynik": "ok"}
     await hass.async_block_till_done()
-    assert len(duress_found) == 2
+    assert [event.data["przymus"] for event in codes] == [False, True, True]
 
 
 @pytest.mark.parametrize("entry_options", [NO_DELAYS])
 async def test_a_wrong_code_is_still_wrong(hass, users, loaded) -> None:
     await give_pins(hass, users)
     await _set_duress(hass, users.admin, users.piotr, DURESS)
-    duress_found = _listen(hass, EVENT_DURESS)
     await alarm(hass, "alarm_arm_away", users.adam, "8642")
+    codes = _listen(hass, EVENT_CODE)
     with pytest.raises(ServiceValidationError) as err:
         await alarm(hass, "alarm_disarm", users.tablet, "7315")
+    await hass.async_block_till_done()
     assert err.value.translation_key == "wrong_pin"
-    assert duress_found == []
+    # A wrong code fires the code event too (the same logbook entry), no owner.
+    assert [(e.data["przymus"], e.data["wlasciciel_id"]) for e in codes] == [(False, None)]
     assert hass.states.get(ENTITY).state == "armed_away"
 
 
@@ -239,6 +299,44 @@ async def test_the_work_does_not_tell_which_kind(hass, users, loaded, scrypt_cal
         counts.append(scrypt_calls.calls - before)
     # Every stored PIN of both kinds is hashed each time: 4 PINs + 1 duress PIN.
     assert counts == [5, 5, 5]
+
+
+@pytest.mark.parametrize("entry_options", [NO_DELAYS])
+async def test_a_lock_does_not_swallow_the_silent_alarm(
+    hass, users, loaded, hass_ws_client, scrypt_calls
+) -> None:
+    """D-1: during a lock the code is not accepted, but a right duress PIN still
+    calls for help; every locked attempt fires the event and hashes the same."""
+    pins = await give_pins(hass, users)
+    await _set_duress(hass, users.admin, users.piotr, DURESS)
+    await alarm(hass, "alarm_arm_away", users.adam, pins["adam"])
+    for _ in range(5):
+        with pytest.raises(ServiceValidationError):
+            await alarm(hass, "alarm_disarm", users.piotr, "4826")
+    manager = manager_of(loaded)
+    assert manager.locked_until(users.piotr.id) is not None
+    codes = _listen(hass, EVENT_CODE)
+    counts, keys = [], []
+    for code in (pins["piotr"], DURESS, "5038"):
+        before = scrypt_calls.calls
+        with pytest.raises(ServiceValidationError) as err:
+            await alarm(hass, "alarm_disarm", users.piotr, code)
+        counts.append(scrypt_calls.calls - before)
+        keys.append(err.value.translation_key)
+    await hass.async_block_till_done()
+    assert keys == ["locked_out"] * 3
+    assert hass.states.get(ENTITY).state == "armed_away"
+    # Only the duress PINs are hashed during a lock - the same work every time.
+    assert counts == [1, 1, 1]
+    assert [e.data["przymus"] for e in codes] == [False, True, False]
+    assert _calls(codes)[0].data["wlasciciel_id"] == users.piotr.id
+    # The entry to Bezpieczeństwo the same way.
+    client = await _client(hass, hass_ws_client, users.piotr)
+    codes.clear()
+    answer = await _send(client, WS_CHECK_PIN, pin=DURESS)
+    await hass.async_block_till_done()
+    assert answer["result"]["wynik"] == "zablokowany"
+    assert [e.data["przymus"] for e in codes] == [True]
 
 
 # -- usuwanie, stan, pamięć -------------------------------------------------------
@@ -389,14 +487,15 @@ async def test_a_pins_only_entry_calls_too(hass, users, hass_ws_client) -> None:
     await hass.async_block_till_done()
     await service(hass, "set_pin", users.admin, {"user_id": users.piotr.id, "pin": "1357"})
     await _set_duress(hass, users.admin, users.piotr, DURESS)
-    duress_found = _listen(hass, EVENT_DURESS)
+    codes = _listen(hass, EVENT_CODE)
     client = await _client(hass, hass_ws_client, users.piotr)
     answer = await _send(client, WS_CHECK_PIN, pin=DURESS)
     assert answer["result"]["wynik"] == "poprawny"
     await hass.async_block_till_done()
-    assert [event.data["wlasciciel_id"] for event in duress_found] == [users.piotr.id]
-    assert duress_found[0].data["entity_id"] is None
+    assert [event.data["wlasciciel_id"] for event in _calls(codes)] == [users.piotr.id]
+    assert codes[0].data["entity_id"] is None
 
 
-def test_the_duress_event_is_not_the_logbook_one() -> None:
-    assert EVENT_DURESS != EVENT_ALARM
+def test_the_code_event_is_not_the_logbook_one() -> None:
+    assert EVENT_CODE != EVENT_ALARM
+    assert "napad" not in EVENT_CODE

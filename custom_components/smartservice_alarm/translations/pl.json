@@ -97,7 +97,7 @@
         "user_id": { "name": "ID użytkownika", "description": "ID użytkownika, do którego należy PIN." },
         "pin": { "name": "PIN", "description": "Nowy PIN: od 4 do 8 cyfr, inny niż PIN-y pozostałych użytkowników." },
         "current_pin": { "name": "Obecny PIN", "description": "Wymagany, gdy użytkownik zmienia swój istniejący PIN." },
-        "rodzaj": { "name": "Rodzaj", "description": "pin (domyślnie) albo przymus: PIN pod przymusem, który działa jak PIN użytkownika i dodatkowo wysyła cichy alarm. Wszystkie PIN-y obu rodzajów są różne." },
+        "rodzaj": { "name": "Rodzaj", "description": "pin (domyślnie) albo przymus: PIN pod przymusem, który działa jak PIN użytkownika i dodatkowo wysyła cichy alarm. Wszystkie PIN-y obu rodzajów są różne. Ustawiaj go przez Smart Service HA (websocket): dane tej usługi, także PIN i jego rodzaj, trafiają do bazy recordera." },
         "entity_id": { "name": "Centrala alarmu", "description": "Potrzebna tylko przy więcej niż jednej centrali." }
       }
     },

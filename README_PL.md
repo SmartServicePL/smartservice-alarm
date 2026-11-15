@@ -187,12 +187,18 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   bez liczenia jako nieudana próba).
 - **PIN pod przymusem.** Domownik może mieć drugi PIN (`rodzaj`: `przymus`
   w `set_pin` / `clear_pin`, tylko gdy ma PIN). Działa dokładnie jak jego PIN -
-  ten sam stan, wpis w dzienniku i odpowiedź - a dodatkowo wysyła
-  `smartservice_alarm_napad` (`entity_id`, `wlasciciel_id`, `czas`), zdarzenie,
-  którego dziennik nie pokazuje, do cichego alarmu w automatyzacji. Każde
-  sprawdzenie liczy skróty PIN-ów obu rodzajów, więc czas nie zdradza, który
-  pasował. Ustawienie i usunięcie PIN-u pod przymusem nie zostawia wpisu
-  w dzienniku.
+  ten sam stan, wpis w dzienniku i odpowiedź. Każda próba kodu (dobra, błędna
+  albo w czasie blokady) wysyła jedno zdarzenie `smartservice_alarm_kod`
+  (`entity_id`, `wlasciciel_id`, `przymus`, `czas`; nigdy PIN), z `przymus`
+  równym true tylko dla PIN-u pod przymusem - także w czasie blokady i gdy
+  podano go jako obecny PIN przy „Zmień PIN” (wtedy nowy PIN zastępuje PIN pod
+  przymusem). Automatyzacja cichego alarmu bierze to zdarzenie bez własnego
+  warunku i sprawdza `przymus` w akcjach - jej wpis w dzienniku („triggered by
+  event …”) jest wtedy taki sam przy każdym kodzie. Samego zdarzenia dziennik
+  nie opisuje. Każde sprawdzenie liczy skróty PIN-ów obu rodzajów, więc czas
+  nie zdradza, który pasował. Ustawienie i usunięcie PIN-u pod przymusem nie
+  zostawia wpisu w dzienniku. Cofnięcie do 1.4.x usuwa PIN-y pod przymusem -
+  po ponownej aktualizacji ustaw je jeszcze raz.
 - PIN-y i blokady usuniętych użytkowników są usuwane.
 - Diagnostyka ukrywa sole i skróty; `status`, atrybuty, zdarzenia i logi
   integracji nigdy nie zawierają PIN-u, skrótu ani soli.

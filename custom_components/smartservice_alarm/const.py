@@ -90,13 +90,17 @@ ACTION_ENTRY: Final = "wejscie_bezpieczenstwo"
 ACTION_ENTRY_FAILED: Final = "wejscie_bezpieczenstwo_nieudane"
 
 # 1.5.0: a second PIN of a household member, used under duress. It works
-# exactly like the member's PIN; the only extra is one event of its own type,
-# which nothing describes for the logbook - so it never shows there.
+# exactly like the member's PIN. Every code attempt (PIN or duress PIN, right,
+# wrong or during a lock) fires one event of the neutral type EVENT_CODE, with
+# the field EVENT_CODE_DURESS true only for a duress PIN. Nothing describes it
+# for the logbook, and an automation on it is triggered by every attempt alike,
+# so its logbook entry ("triggered by event ...") never tells the kinds apart.
 PIN_KIND: Final = "rodzaj"
 PIN_KIND_NORMAL: Final = "pin"
 PIN_KIND_DURESS: Final = "przymus"
 PIN_KINDS: Final = (PIN_KIND_NORMAL, PIN_KIND_DURESS)
-EVENT_DURESS: Final = "smartservice_alarm_napad"
+EVENT_CODE: Final = "smartservice_alarm_kod"
+EVENT_CODE_DURESS: Final = "przymus"
 
 # Websocket command, not a service: Home Assistant puts the data of every
 # service call into a call_service event, and the recorder writes it to its

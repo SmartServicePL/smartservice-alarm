@@ -97,7 +97,7 @@
         "user_id": { "name": "User ID", "description": "ID of the user who owns the PIN." },
         "pin": { "name": "PIN", "description": "New PIN: 4 to 8 digits, different from the PINs of other users." },
         "current_pin": { "name": "Current PIN", "description": "Required when a user changes his own existing PIN." },
-        "rodzaj": { "name": "Kind", "description": "pin (default) or przymus: the duress PIN, which works like the user's PIN and also sends a silent alarm. Every PIN, of both kinds, is different." },
+        "rodzaj": { "name": "Kind", "description": "pin (default) or przymus: the duress PIN, which works like the user's PIN and also sends a silent alarm. Every PIN, of both kinds, is different. Set it through Smart Service HA (websocket): the data of this action, the PIN and its kind too, goes to the recorder's database." },
         "entity_id": { "name": "Alarm panel", "description": "Needed only when more than one alarm panel is configured." }
       }
     },

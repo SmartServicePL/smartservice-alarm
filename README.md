@@ -180,12 +180,18 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   (`first_pin_by_admin`, not counted as a failed attempt).
 - **Duress PIN.** A household member can have a second PIN (`rodzaj`:
   `przymus` in `set_pin` / `clear_pin`, only for somebody with a PIN). It
-  works exactly like his PIN - the same state, logbook entry and answer - and
-  also fires `smartservice_alarm_napad` (`entity_id`, `wlasciciel_id`,
-  `czas`), an event the logbook does not show, for a silent alarm by an
-  automation. Every check hashes the PINs of both kinds, so the time does not
-  tell which kind matched. Setting or removing a duress PIN leaves no logbook
-  entry.
+  works exactly like his PIN - the same state, logbook entry and answer. Every
+  code attempt (right, wrong or during a lock) fires one event,
+  `smartservice_alarm_kod` (`entity_id`, `wlasciciel_id`, `przymus`, `czas`;
+  never a PIN), with `przymus` true only for a duress PIN - also during a lock
+  and when it is given as the current PIN of „change PIN” (then the new PIN
+  replaces the duress PIN). An automation for a silent alarm takes this event
+  without a condition of its own and checks `przymus` in its actions: its
+  logbook entry („triggered by event …”) is then the same for every code. The
+  logbook does not describe the event itself. Every check hashes the PINs of
+  both kinds, so the time does not tell which kind matched. Setting or
+  removing a duress PIN leaves no logbook entry. Going back to 1.4.x drops the
+  duress PINs - set them again after updating.
 - PINs and lockouts of deleted users are removed.
 - Diagnostics redact salts and hashes; `status`, attributes, events and the
   integration's logs never contain a PIN, a hash or a salt.
