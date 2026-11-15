@@ -33,8 +33,17 @@ async def test_status_for_admin_without_secrets(hass, users, loaded) -> None:
             await alarm(hass, "alarm_disarm", users.piotr, WRONG)
 
     response = await service(hass, "status", users.admin, response=True)
-    assert response[users.admin.id] == {"pin": True, "zablokowany_do": None}
-    assert response[users.adam.id] == {"pin": False, "zablokowany_do": None}
+    # 1.5.0: whether a duress PIN is set - never the PIN itself.
+    assert response[users.admin.id] == {
+        "pin": True,
+        "pin_przymus": False,
+        "zablokowany_do": None,
+    }
+    assert response[users.adam.id] == {
+        "pin": False,
+        "pin_przymus": False,
+        "zablokowany_do": None,
+    }
     assert response[users.piotr.id]["pin"] is True
     until = dt_util.parse_datetime(response[users.piotr.id]["zablokowany_do"])
     assert until > dt_util.utcnow()

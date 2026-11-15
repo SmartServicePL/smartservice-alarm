@@ -290,7 +290,10 @@ async def test_websocket_kind_checked_without_logging_the_pin(
     assert answer["success"] is False
     assert answer["error"]["translation_key"] == "unknown_pin_kind"
     assert not manager_of(loaded).has_duress(users.piotr.id)
-    assert re.search(r"(?<![0-9])6194(?![0-9])", caplog.text) is None
+    # The PIN as a value of its own, never inside a stored salt or hash
+    # (base64 - the test harness logs every Store write at DEBUG).
+    assert '"6194"' not in caplog.text and "'6194'" not in caplog.text
+    assert re.search(r"(?<![0-9A-Za-z+/])6194(?![0-9A-Za-z+/=])", caplog.text) is None
     # The right kind by websocket.
     answer = await _send(client, WS_SET_PIN, user_id=users.piotr.id, pin="6194", rodzaj="przymus")
     assert answer["result"] == {"wynik": "ok"}
