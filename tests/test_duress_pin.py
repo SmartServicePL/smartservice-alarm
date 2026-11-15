@@ -286,6 +286,8 @@ async def test_kept_after_a_restart_and_dropped_with_the_user(hass, users, loade
 # 6 digits: a chance hit inside the base64 of a salt or a hash is practically
 # impossible, so the PIN is searched for as a token of its own everywhere.
 WS_DURESS = "619427"
+# Home Assistant's own websocket debug log (README: off by default).
+WS_API_LOG = "homeassistant.components.websocket_api"
 
 
 def _alone(pin: str) -> re.Pattern[str]:
@@ -317,11 +319,20 @@ async def test_websocket_kind_checked_without_logging_the_pin(
     assert manager_of(loaded).has_duress(users.piotr.id)
     await hass.async_block_till_done()
     stored = json.dumps(await _stored(hass_storage, loaded))
-    # Never as a token: not in the whole log (every level, every logger) nor
-    # in the Store as written - after the refused and after the accepted one.
-    for text in (caplog.text, stored):
+    # Every logger at DEBUG. The one exception is Home Assistant's own debug
+    # log of the websocket API: it writes every received message, this PIN
+    # too (README, "off by default; keep it off") - the integration cannot
+    # change it. Anywhere else in the log, and in the Store as written: never.
+    own = [r for r in caplog.records if not r.name.startswith(WS_API_LOG)]
+    texts = ["\n".join(r.getMessage() for r in own), stored]
+    for text in texts:
         assert not _alone(WS_DURESS).search(text)
         assert f'"{WS_DURESS}"' not in text and f"'{WS_DURESS}'" not in text
+    # ... and that exception is only the received message itself.
+    for record in caplog.records:
+        if _alone(WS_DURESS).search(record.getMessage()):
+            assert record.name.startswith(WS_API_LOG), record.name
+            assert "Received {" in record.getMessage(), record.getMessage()[:80]
 
 
 async def test_the_store_keeps_only_a_salt_and_a_scrypt_hash(
