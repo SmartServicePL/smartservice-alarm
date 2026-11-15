@@ -8,6 +8,9 @@ administrator; domownik zmienia tylko swój istniejący, podając swój PIN.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import logging
 import re
 from typing import Any
@@ -280,24 +283,85 @@ async def test_kept_after_a_restart_and_dropped_with_the_user(hass, users, loade
     assert not manager.has_duress(users.piotr.id)
 
 
+# 6 digits: a chance hit inside the base64 of a salt or a hash is practically
+# impossible, so the PIN is searched for as a token of its own everywhere.
+WS_DURESS = "619427"
+
+
+def _alone(pin: str) -> re.Pattern[str]:
+    """The PIN as a token: no digit or letter on either side."""
+    return re.compile(rf"(?<![0-9A-Za-z]){pin}(?![0-9A-Za-z])")
+
+
+async def _stored(hass_storage: dict[str, Any], entry: Any) -> dict[str, Any]:
+    """The integration's Store as written (saved now, not after the delay)."""
+    await manager_of(entry).async_save()
+    return hass_storage[f"smartservice_alarm.{entry.entry_id}"]["data"]
+
+
 async def test_websocket_kind_checked_without_logging_the_pin(
-    hass, users, loaded, hass_ws_client, caplog
+    hass, users, loaded, hass_ws_client, caplog, hass_storage
 ) -> None:
     await give_pins(hass, users)
     client = await _client(hass, hass_ws_client, users.admin)
     caplog.set_level(logging.DEBUG)
-    answer = await _send(client, WS_SET_PIN, user_id=users.piotr.id, pin="6194", rodzaj="inny")
+    answer = await _send(client, WS_SET_PIN, user_id=users.piotr.id, pin=WS_DURESS, rodzaj="inny")
     assert answer["success"] is False
     assert answer["error"]["translation_key"] == "unknown_pin_kind"
     assert not manager_of(loaded).has_duress(users.piotr.id)
-    # The PIN as a value of its own, never inside a stored salt or hash
-    # (base64 - the test harness logs every Store write at DEBUG).
-    assert '"6194"' not in caplog.text and "'6194'" not in caplog.text
-    assert re.search(r"(?<![0-9A-Za-z+/])6194(?![0-9A-Za-z+/=])", caplog.text) is None
     # The right kind by websocket.
-    answer = await _send(client, WS_SET_PIN, user_id=users.piotr.id, pin="6194", rodzaj="przymus")
+    answer = await _send(
+        client, WS_SET_PIN, user_id=users.piotr.id, pin=WS_DURESS, rodzaj="przymus"
+    )
     assert answer["result"] == {"wynik": "ok"}
     assert manager_of(loaded).has_duress(users.piotr.id)
+    await hass.async_block_till_done()
+    stored = json.dumps(await _stored(hass_storage, loaded))
+    # Never as a token: not in the whole log (every level, every logger) nor
+    # in the Store as written - after the refused and after the accepted one.
+    for text in (caplog.text, stored):
+        assert not _alone(WS_DURESS).search(text)
+        assert f'"{WS_DURESS}"' not in text and f"'{WS_DURESS}'" not in text
+
+
+async def test_the_store_keeps_only_a_salt_and_a_scrypt_hash(
+    hass, users, loaded, hass_storage
+) -> None:
+    pins = await give_pins(hass, users)
+    await _set_duress(hass, users.admin, users.piotr, WS_DURESS)
+    data = await _stored(hass_storage, loaded)
+    records = {
+        **{f"pin:{k}": v for k, v in data["piny"].items()},
+        **{f"przymus:{k}": v for k, v in data["przymus"].items()},
+    }
+    assert f"przymus:{users.piotr.id}" in records
+    for name, record in records.items():
+        # Only the salt, the hash, scrypt's parameters and the change's time.
+        assert set(record) == {"salt", "hash", "n", "r", "p", "zmieniono"}, name
+        assert len(base64.b64decode(record["salt"], validate=True)) >= 16, name
+        assert len(base64.b64decode(record["hash"], validate=True)) >= 32, name
+        assert int(record["n"]) >= 2**14, name
+    # Each record is the scrypt of its own PIN (and of no other).
+    assert record_matches(records[f"przymus:{users.piotr.id}"], WS_DURESS)
+    assert not record_matches(records[f"przymus:{users.piotr.id}"], pins["piotr"])
+    assert record_matches(records[f"pin:{users.piotr.id}"], pins["piotr"])
+    # No PIN in a plain form anywhere in the Store: as it is, reversed, in
+    # base64, hex, or a fast unsalted hash.
+    text = json.dumps(data)
+    for pin in (*pins.values(), WS_DURESS):
+        raw = pin.encode()
+        forms = {
+            pin,
+            pin[::-1],
+            base64.b64encode(raw).decode(),
+            raw.hex(),
+            hashlib.md5(raw).hexdigest(),
+            hashlib.sha1(raw).hexdigest(),
+            hashlib.sha256(raw).hexdigest(),
+            base64.b64encode(hashlib.sha256(raw).digest()).decode(),
+        }
+        for form in forms:
+            assert not _alone(re.escape(form)).search(text), (pin, form)
 
 
 async def test_a_pins_only_entry_calls_too(hass, users, hass_ws_client) -> None:
