@@ -83,6 +83,7 @@
     "admin_required": { "message": "Tylko administrator może to zrobić." },
     "own_pin_only": { "message": "Możesz ustawić tylko własny PIN." },
     "first_pin_by_admin": { "message": "Pierwszy PIN ustawia administrator." },
+    "too_many_pin_changes": { "message": "Za dużo zmian PIN-u w ciągu godziny. Spróbuj później." },
     "duress_needs_pin": { "message": "PIN pod przymusem można ustawić tylko komuś, kto ma PIN." },
     "unknown_pin_kind": { "message": "Nieznany rodzaj PIN-u." },
     "unknown_user": { "message": "Nie ma takiego użytkownika." },

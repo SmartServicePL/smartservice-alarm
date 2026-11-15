@@ -10,7 +10,9 @@
   dla PIN-u pod przymusem, także w czasie blokady prób; automatyzacja na tym
   zdarzeniu zostawia w dzienniku ten sam wpis przy każdym kodzie. Ustawia go
   administrator; domownik zmienia tylko swój istniejący, podając swój PIN (PIN
-  pod przymusem podany jako obecny zmienia PIN pod przymusem). Po cofnięciu do
+  pod przymusem podany jako obecny zmienia PIN pod przymusem przy zmianie
+  PIN-u; przy ustawianiu PIN-u pod przymusem odpowiedź jak dla osoby, która go
+  nie ma). Domownik zmienia swoje PIN-y najwyżej 3 razy na godzinę. Po cofnięciu do
   1.4.x PIN-y pod przymusem znikają - ustaw je ponownie po aktualizacji. Wszystkie PIN-y obu rodzajów są różne. `clear_pin` z
   `rodzaj`: `przymus` usuwa tylko ten PIN; usunięcie PIN-u usuwa też PIN pod
   przymusem. `status` pokazuje `pin_przymus`.
@@ -22,7 +24,9 @@
   for a duress PIN, also during a lock; an automation on it leaves the same
   logbook entry for every code. An administrator sets it; a user only changes
   his own existing one, with his PIN (his duress PIN given as the current one
-  changes the duress PIN). After going back to 1.4.x the duress PINs are gone
+  changes the duress PIN at „change PIN”; asked to set the duress PIN with it,
+  the answer is the one of somebody without a duress PIN). A household member
+  changes his PINs at most 3 times an hour. After going back to 1.4.x the duress PINs are gone
   - set them again after updating. Every PIN of both kinds is different. `clear_pin` with `rodzaj`:
   `przymus` removes only that PIN; removing a PIN removes the duress PIN too.
   `status` shows `pin_przymus`.

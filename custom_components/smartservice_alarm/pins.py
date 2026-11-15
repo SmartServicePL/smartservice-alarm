@@ -55,6 +55,11 @@ SALT_BYTES = 16
 PIN_PATTERN = re.compile(r"[0-9]{4,8}")
 
 MAX_FAILURES = 5
+# 1.5.0 (N-2): a household member changes his PINs (either kind) at most this
+# often; more changes count as failed attempts, with the same locks - set_pin
+# cannot be used to walk through PINs.
+PIN_CHANGES_MAX = 3
+PIN_CHANGES_WINDOW = timedelta(hours=1)
 LOCK_BASE_SECONDS = 60
 LOCK_MAX_SECONDS = 900
 # A wrong-code streak is forgotten only after this long without a wrong code;
@@ -285,6 +290,8 @@ class PinManager:
         )
         self._data: dict[str, Any] = {key: {} for key in _KEYS}
         self._lock = asyncio.Lock()
+        # N-2: the times of each member's own PIN changes (memory only).
+        self._changes: dict[str, list[datetime]] = {}
         # Platforms set up for this entry (none when it keeps only PINs).
         self.platforms: list[str] = []
 
@@ -591,9 +598,15 @@ class PinManager:
         duress PIN given as the current one is accepted like his PIN: the code
         event says ``przymus`` (the silent alarm) and the new PIN replaces the
         duress PIN, never his PIN - whoever forced the code keeps a code that
-        calls for help.
+        calls for help. Asked to set the duress PIN with it, the answer is the
+        one of somebody without a duress PIN (first_pin_by_admin, nothing
+        changed or counted) - the silent alarm goes anyway (N-1).
+
+        A user's own changes (either kind) are at most PIN_CHANGES_MAX an hour;
+        more count as failed attempts (N-2).
         """
         duress = kind == PIN_KIND_DURESS
+        asked_duress = duress
         async with self._lock:
             if duress and target_id not in self.pins:
                 raise alarm_error("duress_needs_pin")
@@ -634,10 +647,26 @@ class PinManager:
             if not current_ok:
                 raise await self._async_fail(bucket, "wrong_current_pin", context)
             if current_is_duress:
-                # W-1: the change goes to the duress PIN, whatever was asked.
+                if asked_duress:
+                    # N-1: as for somebody without a duress PIN; nothing
+                    # changes, nothing is counted (the code event went).
+                    raise alarm_error("first_pin_by_admin")
+                # W-1: "change PIN" with it changes the duress PIN.
                 duress = True
             elif not admin and duress and target_id not in self.duress:
                 raise alarm_error("first_pin_by_admin")
+            if not admin:
+                now = dt_util.utcnow()
+                recent = [
+                    when
+                    for when in self._changes.get(target_id, [])
+                    if now - when < PIN_CHANGES_WINDOW
+                ]
+                self._changes[target_id] = recent
+                if len(recent) >= PIN_CHANGES_MAX:
+                    raise await self._async_fail(
+                        bucket, "too_many_pin_changes", context
+                    )
             records = self.duress if duress else self.pins
             # The record being replaced is the only match that is allowed.
             taken = [owner for owner in owners if duress or owner != target_id]
@@ -651,6 +680,8 @@ class PinManager:
                 new_record, pin, dt_util.now()
             )
             records[target_id] = record
+            if not admin:
+                self._changes.setdefault(target_id, []).append(dt_util.utcnow())
             await self.async_save()
 
     async def async_clear_pin(self, user_id: str, kind: str = PIN_KIND_NORMAL) -> bool:

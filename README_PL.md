@@ -192,7 +192,9 @@ do 18:05”, „Alarm: drzwi ogrodowe”.
   (`entity_id`, `wlasciciel_id`, `przymus`, `czas`; nigdy PIN), z `przymus`
   równym true tylko dla PIN-u pod przymusem - także w czasie blokady i gdy
   podano go jako obecny PIN przy „Zmień PIN” (wtedy nowy PIN zastępuje PIN pod
-  przymusem). Automatyzacja cichego alarmu bierze to zdarzenie bez własnego
+  przymusem; przy ustawianiu PIN-u pod przymusem odpowiedź jest taka jak dla
+  osoby, która go nie ma). Domownik zmienia swoje PIN-y najwyżej 3 razy na
+  godzinę; kolejne zmiany liczą się jak błędne próby. Automatyzacja cichego alarmu bierze to zdarzenie bez własnego
   warunku i sprawdza `przymus` w akcjach - jej wpis w dzienniku („triggered by
   event …”) jest wtedy taki sam przy każdym kodzie. Samego zdarzenia dziennik
   nie opisuje. Każde sprawdzenie liczy skróty PIN-ów obu rodzajów, więc czas

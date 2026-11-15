@@ -184,6 +184,57 @@ async def test_his_duress_pin_as_the_current_one_changes_the_duress_pin(
     assert forced_codes[0].data["wlasciciel_id"] == users.piotr.id
 
 
+async def test_setting_a_duress_pin_with_it_answers_as_without_one(hass, users, loaded) -> None:
+    """N-1: „set the duress PIN” with the duress PIN as the current one answers
+    like for somebody without a duress PIN - nothing changes or is counted,
+    the silent alarm goes anyway."""
+    pins = await give_pins(hass, users)
+    await _set_duress(hass, users.admin, users.piotr, DURESS)
+    manager = manager_of(loaded)
+    # Adam has no duress PIN: his own PIN as the current one.
+    adam_alarm = _listen(hass, EVENT_ALARM)
+    with pytest.raises(ServiceValidationError) as err:
+        await _set_duress(hass, users.adam, users.adam, "5927", pins["adam"])
+    assert err.value.translation_key == "first_pin_by_admin"
+    await hass.async_block_till_done()
+    # Piotr's duress PIN as the current one: the same answer.
+    alarm_found = _listen(hass, EVENT_ALARM)
+    codes = _listen(hass, EVENT_CODE)
+    with pytest.raises(ServiceValidationError) as err:
+        await _set_duress(hass, users.piotr, users.piotr, "5927", DURESS)
+    await hass.async_block_till_done()
+    assert err.value.translation_key == "first_pin_by_admin"
+    assert manager.lockouts == {}
+    assert alarm_found == [] and adam_alarm == []
+    # Nothing changed: the duress PIN still works, the new one does not.
+    assert record_matches(manager.duress[users.piotr.id], DURESS)
+    assert not record_matches(manager.duress[users.piotr.id], "5927")
+    assert record_matches(manager.pins[users.piotr.id], pins["piotr"])
+    # The silent alarm went.
+    assert [(e.data["przymus"], e.data["wlasciciel_id"]) for e in codes] == [(True, users.piotr.id)]
+
+
+async def test_a_member_changes_his_pins_at_most_3_times_an_hour(hass, users, loaded) -> None:
+    """N-2: more own changes count as failed attempts (the same locks)."""
+    pins = await give_pins(hass, users)
+    manager = manager_of(loaded)
+    current = pins["piotr"]
+    for new in ("2749", "3816", "4927"):
+        change = {"user_id": users.piotr.id, "pin": new, "current_pin": current}
+        await service(hass, "set_pin", users.piotr, change)
+        current = new
+    assert manager.lockouts == {}
+    with pytest.raises(ServiceValidationError) as err:
+        change = {"user_id": users.piotr.id, "pin": "5038", "current_pin": current}
+        await service(hass, "set_pin", users.piotr, change)
+    assert err.value.translation_key == "too_many_pin_changes"
+    assert manager.lockouts[users.piotr.id]["nieudane"] == 1
+    assert record_matches(manager.pins[users.piotr.id], current)
+    # An administrator is not limited.
+    for new in ("6149", "7250", "8361", "9472"):
+        await service(hass, "set_pin", users.admin, {"user_id": users.adam.id, "pin": new})
+
+
 async def test_nothing_tells_a_duress_pin_without_the_pin(hass, users, loaded) -> None:
     """W-2: a user's current PIN is checked (and counted) first - the answer
     without it is the same whether he has a duress PIN or not."""

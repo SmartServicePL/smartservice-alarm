@@ -83,6 +83,7 @@
     "admin_required": { "message": "Only an administrator can do this." },
     "own_pin_only": { "message": "You can only set your own PIN." },
     "first_pin_by_admin": { "message": "Your first PIN is set by an administrator." },
+    "too_many_pin_changes": { "message": "Too many PIN changes within an hour. Try again later." },
     "duress_needs_pin": { "message": "A duress PIN can be set only for somebody who has a PIN." },
     "unknown_pin_kind": { "message": "Unknown kind of PIN." },
     "unknown_user": { "message": "There is no such user." },

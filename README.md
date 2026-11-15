@@ -185,7 +185,9 @@ Living room tablet)* or *Wrong PIN from account Piotr (3/5)*.
   `smartservice_alarm_kod` (`entity_id`, `wlasciciel_id`, `przymus`, `czas`;
   never a PIN), with `przymus` true only for a duress PIN - also during a lock
   and when it is given as the current PIN of „change PIN” (then the new PIN
-  replaces the duress PIN). An automation for a silent alarm takes this event
+  replaces the duress PIN; asked to set the duress PIN with it, the answer is
+  the one of somebody without a duress PIN). A household member changes his
+  PINs at most 3 times an hour; more changes count as failed attempts. An automation for a silent alarm takes this event
   without a condition of its own and checks `przymus` in its actions: its
   logbook entry („triggered by event …”) is then the same for every code. The
   logbook does not describe the event itself. Every check hashes the PINs of
